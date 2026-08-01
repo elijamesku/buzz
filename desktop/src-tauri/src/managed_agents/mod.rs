@@ -15,6 +15,7 @@ mod env_vars;
 pub(crate) mod git_bash;
 pub(crate) mod global_config;
 mod managed_node_paths;
+pub(crate) mod mcp_inject;
 mod nest;
 mod persona_avatars;
 pub(crate) mod persona_events;

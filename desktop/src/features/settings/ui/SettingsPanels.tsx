@@ -14,6 +14,7 @@ import {
   MessagesSquare,
   MonitorCog,
   Moon,
+  Plug,
   ShieldAlert,
   Smartphone,
   Smile,
@@ -71,6 +72,7 @@ import {
 } from "@/shared/theme/useThemePreviewVars";
 import { ChannelTemplatesSettingsCard } from "./ChannelTemplatesSettingsCard";
 import { HarnessesSettingsPanel } from "./HarnessesSettingsPanel";
+import { IntegrationsSettingsPanel } from "./IntegrationsSettingsPanel";
 import { ExperimentalFeaturesCard } from "./ExperimentalFeaturesCard";
 import { KeyboardShortcutsCard } from "./KeyboardShortcutsCard";
 import { MeshComputeSettingsCard } from "@/features/mesh-compute/ui/MeshComputeSettingsCard";
@@ -92,6 +94,7 @@ export type SettingsSection =
   | "voice"
   | "experimental"
   | "agents"
+  | "integrations"
   | "channel-templates"
   | "compute"
   | "appearance"
@@ -112,6 +115,7 @@ const SETTINGS_SECTION_VALUES: readonly SettingsSection[] = [
   "voice",
   "experimental",
   "agents",
+  "integrations",
   "channel-templates",
   "compute",
   "appearance",
@@ -186,6 +190,11 @@ export const settingsSections: SettingsSectionDescriptor[] = [
     label: "Agents",
     icon: Bot,
     featureGate: "managed-agents",
+  },
+  {
+    value: "integrations",
+    label: "Integrations",
+    icon: Plug,
   },
   {
     value: "channel-templates",
@@ -828,6 +837,8 @@ export function renderSettingsSection(
           <AgentDefaultsSettingsCard />
         </div>
       );
+    case "integrations":
+      return <IntegrationsSettingsPanel />;
     case "channel-templates":
       return <ChannelTemplatesSettingsCard />;
     case "compute":

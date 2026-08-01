@@ -1029,3 +1029,53 @@ export type GlobalAgentConfigSaveResult = {
   /** Number of agents whose stop succeeded but respawn failed. */
   failed_restart_count: number;
 };
+
+// ── GitHub connector (integrations) ───────────────────────────────────────────
+
+/**
+ * Result of `github_device_start` — the OAuth Device Flow handshake.
+ *
+ * Mirrors the Rust `GithubDeviceCode` struct. The UI shows `userCode` and opens
+ * `verificationUri`, then polls with `deviceCode` every `interval` seconds.
+ */
+export type GithubDeviceCode = {
+  deviceCode: string;
+  userCode: string;
+  verificationUri: string;
+  expiresIn: number;
+  interval: number;
+};
+
+/**
+ * Result of a single `github_device_poll` call.
+ *
+ * `status` is `"pending"` (keep polling), `"slow_down"` (poll less often),
+ * `"authorized"` (done — token stored, MCP server injected), or `"error"`.
+ * Mirrors the Rust `GithubPollResult` struct.
+ */
+export type GithubPollResult = {
+  status: "pending" | "slow_down" | "authorized" | "error";
+  /** GitHub login, present when authorized. */
+  login: string | null;
+  /** Human-readable message when status is "error". */
+  error: string | null;
+  /** Runtimes the MCP server was injected into (claude/codex/goose). */
+  runtimes: string[];
+  /** Non-fatal per-runtime injection warnings, "<runtime>: <reason>". */
+  warnings: string[];
+};
+
+/**
+ * Current GitHub connection state (never carries token material).
+ *
+ * Mirrors the Rust `GithubIntegrationStatus` struct.
+ */
+export type GithubIntegrationStatus = {
+  connected: boolean;
+  login: string | null;
+  scope: string | null;
+  clientId: string | null;
+  connectedAt: string | null;
+  /** Runtimes the server was injected into at connect time. */
+  runtimes: string[];
+};
