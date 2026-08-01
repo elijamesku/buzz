@@ -37,6 +37,7 @@ import {
 } from "@/features/sidebar/ui/AppSidebarPinnedHeader";
 import { MoreUnreadButton } from "@/features/sidebar/ui/MoreUnreadButton";
 import { SidebarSection } from "@/features/sidebar/ui/SidebarSection";
+import { TeamRosterSection } from "@/features/agents/ui/TeamRosterSection";
 import {
   ChannelGroupSection,
   CustomChannelSection,
@@ -844,6 +845,7 @@ export function AppSidebar({
                     onMuteChannel={onMuteChannel}
                     onUnmuteChannel={onUnmuteChannel}
                   />
+                  <TeamRosterSection />
                 </>
               ) : null}
 
