@@ -1,6 +1,8 @@
 import * as React from "react";
+import { PenTool } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Outlet, useLocation } from "@tanstack/react-router";
+import { DesignWorkspaceScreen } from "@/features/design/ui/DesignWorkspaceScreen";
 import { deriveShellRoute } from "@/app/AppShell.helpers";
 import { AppShellProvider } from "@/app/AppShellContext";
 import * as BuzzTheme from "@/app/BuzzThemeSurfaces";
@@ -621,6 +623,8 @@ export function AppShell() {
     () => setIsCreateChannelOpen(true),
     [],
   );
+  // Design workspace — a full-screen overlay (its own surface, not settings).
+  const [designOpen, setDesignOpen] = React.useState(false);
   React.useLayoutEffect(() => {
     if (settingsOpen) {
       return;
@@ -748,6 +752,22 @@ export function AppShell() {
                   )}
                 >
                   <BuzzTheme.GradientLayer />
+                  {!designOpen && !settingsOpen ? (
+                    <button
+                      type="button"
+                      onClick={() => setDesignOpen(true)}
+                      className="fixed bottom-4 right-4 z-40 flex items-center gap-2 rounded-full border border-border/60 bg-card/90 px-3.5 py-2 text-sm font-medium text-foreground shadow-lg backdrop-blur transition-colors hover:bg-card"
+                      data-testid="open-design-workspace"
+                    >
+                      <PenTool className="h-4 w-4" />
+                      Design
+                    </button>
+                  ) : null}
+                  {designOpen ? (
+                    <DesignWorkspaceScreen
+                      onClose={() => setDesignOpen(false)}
+                    />
+                  ) : null}
                   {hasCommunityRail ? (
                     <CommunityRail
                       activeCommunityId={

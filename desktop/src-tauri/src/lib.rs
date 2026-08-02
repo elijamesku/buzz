@@ -822,6 +822,7 @@ pub fn run() {
             get_global_agent_config,
             set_global_agent_config,
             import_website,
+            clone_design_repo,
             github_default_client_id,
             github_device_start,
             github_device_poll,

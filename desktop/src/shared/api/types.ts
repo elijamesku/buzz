@@ -1065,6 +1065,27 @@ export type GithubPollResult = {
   warnings: string[];
 };
 
+// ── Design workspace ──────────────────────────────────────────────────────────
+
+/**
+ * Result of `clone_design_repo` — a cloned frontend repo the design agents work
+ * from. Mirrors the Rust `DesignRepoResult` struct.
+ */
+export type DesignRepoResult = {
+  owner: string;
+  repo: string;
+  /** Absolute path to the cloned working tree. */
+  path: string;
+  /** Detected frontend framework (e.g. "Next.js", "Astro"), or null. */
+  framework: string | null;
+  /** Default branch checked out. */
+  branch: string | null;
+  /** Whether a fresh clone happened (false = already present). */
+  cloned: boolean;
+  /** True when the GitHub connector's token was used (private repos). */
+  authenticated: boolean;
+};
+
 // ── Website import (Design) ───────────────────────────────────────────────────
 
 /** A single captured page from a website import. Mirrors Rust `ImportedPage`. */
