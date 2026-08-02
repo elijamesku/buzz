@@ -14,8 +14,12 @@
 
 use std::collections::{BTreeSet, VecDeque};
 use std::hash::{Hash, Hasher};
+use std::io::Read;
 use std::net::{IpAddr, ToSocketAddrs};
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use serde::Serialize;
 use url::Url;
@@ -25,6 +29,10 @@ const HARD_MAX_PAGES: u32 = 50;
 const MAX_ASSETS: usize = 300;
 const MAX_BYTES_PER_FILE: usize = 25 * 1024 * 1024;
 const REQUEST_TIMEOUT_SECS: u64 = 20;
+/// Hard cap per headless render — Chrome's `--dump-dom` writes the DOM but does
+/// not reliably self-exit, so we stop as soon as the DOM is complete and kill
+/// at this deadline regardless.
+const CHROME_TIMEOUT_SECS: u64 = 15;
 const USER_AGENT: &str = "buzz-desktop-site-import";
 const ASSET_EXTS: &[&str] = &[
     "css", "js", "mjs", "png", "jpg", "jpeg", "gif", "svg", "webp", "avif", "ico", "woff", "woff2",
@@ -218,6 +226,162 @@ fn write_file(path: &Path, bytes: &[u8]) -> Result<(), String> {
     std::fs::write(path, bytes).map_err(|e| format!("write {}: {e}", path.display()))
 }
 
+// ── Headless rendering ──────────────────────────────────────────────────────
+
+/// Locate an installed Chromium-family browser to render JS pages. Honors
+/// `BUZZ_CHROME_PATH`, then checks the usual macOS app bundles and `PATH`.
+fn find_chrome() -> Option<PathBuf> {
+    if let Ok(explicit) = std::env::var("BUZZ_CHROME_PATH") {
+        let p = PathBuf::from(explicit);
+        if p.exists() {
+            return Some(p);
+        }
+    }
+    let bundles = [
+        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        "/Applications/Chromium.app/Contents/MacOS/Chromium",
+        "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+        "/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary",
+        "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+    ];
+    for path in bundles {
+        let p = PathBuf::from(path);
+        if p.exists() {
+            return Some(p);
+        }
+    }
+    for name in [
+        "google-chrome",
+        "google-chrome-stable",
+        "chromium",
+        "chromium-browser",
+        "microsoft-edge",
+        "brave-browser",
+    ] {
+        if let Ok(out) = std::process::Command::new("which").arg(name).output() {
+            if out.status.success() {
+                let path = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                if !path.is_empty() {
+                    return Some(PathBuf::from(path));
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Render `url` in headless Chrome and return the post-JavaScript DOM. Uses a
+/// throwaway profile dir so it never touches the user's live browser session.
+///
+/// `--dump-dom` writes the fully-rendered DOM to stdout but Chrome then lingers
+/// instead of exiting, so we stream stdout, return as soon as the document is
+/// complete (`</html>`), and hard-kill at [`CHROME_TIMEOUT_SECS`]. The captured
+/// DOM is valid even though the process is killed.
+fn chrome_render(chrome: &Path, profile: &Path, url: &Url) -> Result<String, String> {
+    let mut child = Command::new(chrome)
+        .arg("--headless=new")
+        .arg("--disable-gpu")
+        .arg("--no-first-run")
+        .arg("--no-default-browser-check")
+        .arg("--hide-scrollbars")
+        .arg("--disable-extensions")
+        .arg("--mute-audio")
+        .arg(format!("--user-data-dir={}", profile.display()))
+        .arg("--virtual-time-budget=6000")
+        .arg("--dump-dom")
+        .arg(url.as_str())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|e| format!("chrome launch failed: {e}"))?;
+
+    let mut stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| "chrome stdout unavailable".to_string())?;
+    let buffer = Arc::new(Mutex::new(Vec::<u8>::new()));
+    let reader_buffer = Arc::clone(&buffer);
+    let reader = std::thread::spawn(move || {
+        let mut chunk = [0u8; 16384];
+        loop {
+            match stdout.read(&mut chunk) {
+                Ok(0) | Err(_) => break,
+                Ok(n) => reader_buffer.lock().unwrap().extend_from_slice(&chunk[..n]),
+            }
+        }
+    });
+
+    let deadline = Instant::now() + Duration::from_secs(CHROME_TIMEOUT_SECS);
+    loop {
+        if matches!(child.try_wait(), Ok(Some(_))) {
+            break;
+        }
+        {
+            let buf = buffer.lock().unwrap();
+            if !buf.is_empty()
+                && String::from_utf8_lossy(&buf)
+                    .to_ascii_lowercase()
+                    .contains("</html>")
+            {
+                let _ = child.kill();
+                break;
+            }
+        }
+        if Instant::now() >= deadline {
+            let _ = child.kill();
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(200));
+    }
+    let _ = child.wait();
+    let _ = reader.join();
+
+    let bytes = buffer.lock().unwrap().clone();
+    let html = String::from_utf8_lossy(&bytes).into_owned();
+    if html.trim().is_empty() {
+        return Err("chrome returned an empty DOM".to_string());
+    }
+    Ok(html)
+}
+
+/// Fetch a page as HTML — via headless browser when available (renders JS),
+/// otherwise a plain HTTP GET (static HTML only).
+fn render_page(
+    chrome: Option<&Path>,
+    profile: &Path,
+    http: &reqwest::blocking::Client,
+    url: &Url,
+) -> Result<String, String> {
+    if let Some(chrome) = chrome {
+        match chrome_render(chrome, profile, url) {
+            Ok(html) => return Ok(html),
+            Err(e) => {
+                // Fall through to a raw fetch, but surface why rendering failed.
+                if std::env::var("BUZZ_CHROME_PATH").is_ok() {
+                    return Err(format!("render {url} failed: {e}"));
+                }
+            }
+        }
+    }
+    let resp = http
+        .get(url.clone())
+        .send()
+        .map_err(|e| format!("fetch {url} failed: {e}"))?;
+    if !resp.status().is_success() {
+        return Err(format!("fetch {url}: HTTP {}", resp.status()));
+    }
+    let is_html = resp
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .map(|ct| ct.contains("text/html"))
+        .unwrap_or(true);
+    if !is_html {
+        return Err(format!("skip {url}: not HTML"));
+    }
+    resp.text().map_err(|e| format!("read {url} failed: {e}"))
+}
+
 // ── Crawl ───────────────────────────────────────────────────────────────────
 
 fn run_import(entry: &str, max_pages: u32) -> Result<SiteImportResult, String> {
@@ -242,6 +406,21 @@ fn run_import(entry: &str, max_pages: u32) -> Result<SiteImportResult, String> {
 
     let http = client()?;
     let mut warnings: Vec<String> = Vec::new();
+
+    // A headless browser lets us "click through" JS-rendered sites: it runs
+    // page scripts so client-side nav links and content exist before we read
+    // the DOM. Without one we fall back to raw HTML (static sites only).
+    let chrome = find_chrome();
+    let chrome_profile = std::env::temp_dir().join(format!("buzz-import-chrome-{stamp}"));
+    if chrome.is_none() {
+        warnings.push(
+            "No Chrome/Chromium/Edge found — captured raw HTML only, so JS-rendered \
+             pages and links may be missing. Install Chrome (or set BUZZ_CHROME_PATH) \
+             for a full click-through crawl."
+                .to_string(),
+        );
+    }
+
     let mut pages: Vec<ImportedPage> = Vec::new();
     let mut visited: BTreeSet<String> = BTreeSet::new();
     let mut assets_seen: BTreeSet<String> = BTreeSet::new();
@@ -262,33 +441,13 @@ fn run_import(entry: &str, max_pages: u32) -> Result<SiteImportResult, String> {
             continue;
         }
 
-        let resp = match http.get(page_url.clone()).send() {
-            Ok(r) => r,
+        let body = match render_page(chrome.as_deref(), &chrome_profile, &http, &page_url) {
+            Ok(html) => html,
             Err(e) => {
-                warnings.push(format!("fetch {page_url} failed: {e}"));
+                warnings.push(e);
                 continue;
             }
         };
-        if !resp.status().is_success() {
-            warnings.push(format!("fetch {page_url}: HTTP {}", resp.status()));
-            continue;
-        }
-        let is_html = resp
-            .headers()
-            .get(reqwest::header::CONTENT_TYPE)
-            .and_then(|v| v.to_str().ok())
-            .map(|ct| ct.contains("text/html"))
-            .unwrap_or(true);
-        let body = match resp.text() {
-            Ok(b) => b,
-            Err(e) => {
-                warnings.push(format!("read {page_url} failed: {e}"));
-                continue;
-            }
-        };
-        if !is_html {
-            continue;
-        }
 
         let filename = page_filename(&page_url);
         let rel = format!("pages/{filename}");

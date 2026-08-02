@@ -68,10 +68,11 @@ function SiteImportCard(): React.ReactElement {
             Import a website
           </h3>
           <p className="mt-1 text-sm text-muted-foreground">
-            Paste a site URL (e.g. your Webflow marketing site). Buzz snapshots
-            its pages and assets into a local workspace an agent can rebuild as
-            an Astro + Tailwind codebase. Page JavaScript isn't executed — best
-            for static marketing sites.
+            Paste a site URL (e.g. your Webflow marketing site). Buzz renders
+            each page in a headless browser — so JavaScript-driven navigation
+            and content are captured — then snapshots the pages and assets into
+            a local workspace an agent can rebuild as an Astro + Tailwind
+            codebase. Install Chrome for the full click-through crawl.
           </p>
 
           <div className="mt-4 flex flex-col gap-2 sm:flex-row">
