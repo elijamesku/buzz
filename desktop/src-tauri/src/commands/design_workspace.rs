@@ -6,6 +6,8 @@
 //! `~/buzz-design-projects/<owner>_<repo>/`, strips the token back out of the
 //! git remote, and detects the frontend framework so an agent has context.
 
+use std::path::Path;
+
 use serde::Serialize;
 use tauri::AppHandle;
 
@@ -178,7 +180,22 @@ fn clone_blocking(owner: String, repo: String) -> Result<DesignRepoResult, Strin
     ])?;
     if !output.status.success() {
         let err = redact(&String::from_utf8_lossy(&output.stderr), token.as_deref());
-        return Err(format!("git clone failed: {}", err.trim()));
+        let err = err.trim();
+        let lower = err.to_lowercase();
+        let not_found_or_auth = lower.contains("not found")
+            || lower.contains("authentication")
+            || lower.contains("could not read")
+            || lower.contains("permission denied");
+        let hint = if !authenticated && not_found_or_auth {
+            " — if this repo is private, connect GitHub in Settings → Integrations \
+             first (no GitHub token is configured)."
+        } else if authenticated && lower.contains("not found") {
+            " — check the repo name, or that your connected GitHub account can \
+             access it (e.g. org access / SSO authorization)."
+        } else {
+            ""
+        };
+        return Err(format!("git clone failed: {err}{hint}"));
     }
 
     // Never leave the token behind in the repo's remote config.
@@ -224,6 +241,189 @@ pub async fn clone_design_repo(_app: AppHandle, repo: String) -> Result<DesignRe
     tokio::task::spawn_blocking(move || clone_blocking(owner, name))
         .await
         .map_err(|e| format!("spawn_blocking failed: {e}"))?
+}
+
+// ── Browsing cloned projects ────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesignProject {
+    pub owner: String,
+    pub repo: String,
+    pub path: String,
+    pub framework: Option<String>,
+    pub branch: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesignEntry {
+    pub name: String,
+    /// Path relative to the project root (forward-slashed).
+    pub path: String,
+    pub is_dir: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesignFileContent {
+    pub content: String,
+    pub truncated: bool,
+    pub bytes: usize,
+    pub binary: bool,
+}
+
+const FILE_READ_CAP: usize = 512 * 1024;
+
+fn workspace_root() -> Result<std::path::PathBuf, String> {
+    Ok(dirs::home_dir()
+        .ok_or_else(|| "could not resolve home directory".to_string())?
+        .join("buzz-design-projects"))
+}
+
+/// Resolve a caller-supplied project path and confirm it lives inside the design
+/// workspace (prevents reading arbitrary files off disk).
+fn resolve_project_path(path: &str) -> Result<std::path::PathBuf, String> {
+    let root = workspace_root()?
+        .canonicalize()
+        .map_err(|e| format!("design workspace unavailable: {e}"))?;
+    let resolved = std::path::PathBuf::from(path)
+        .canonicalize()
+        .map_err(|e| format!("invalid path: {e}"))?;
+    if !resolved.starts_with(&root) {
+        return Err("path is outside the design workspace".to_string());
+    }
+    Ok(resolved)
+}
+
+/// Join a subpath under `base` and confirm the result stays within `base`.
+fn safe_join(base: &Path, subpath: &str) -> Result<std::path::PathBuf, String> {
+    let joined = base.join(subpath);
+    let canon = joined
+        .canonicalize()
+        .map_err(|e| format!("not found: {e}"))?;
+    let base_canon = base
+        .canonicalize()
+        .map_err(|e| format!("invalid project: {e}"))?;
+    if !canon.starts_with(&base_canon) {
+        return Err("path escapes the project".to_string());
+    }
+    Ok(canon)
+}
+
+fn origin_url(dir: &Path) -> Option<String> {
+    let out = std::process::Command::new("git")
+        .args(["-C", dir.to_str()?, "remote", "get-url", "origin"])
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let url = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    (!url.is_empty()).then_some(url)
+}
+
+fn project_identity(dir: &Path) -> (String, String) {
+    if let Some(url) = origin_url(dir) {
+        if let Ok(pair) = parse_owner_repo(&url) {
+            return pair;
+        }
+    }
+    let name = dir
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or_default()
+        .to_string();
+    match name.rsplit_once('_') {
+        Some((owner, repo)) => (owner.to_string(), repo.to_string()),
+        None => (String::new(), name),
+    }
+}
+
+/// List every frontend repo cloned into the design workspace.
+#[tauri::command]
+pub fn list_design_projects() -> Result<Vec<DesignProject>, String> {
+    let root = workspace_root()?;
+    let mut projects = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(&root) {
+        for entry in entries.flatten() {
+            let dir = entry.path();
+            if dir.join(".git").is_dir() {
+                let (owner, repo) = project_identity(&dir);
+                projects.push(DesignProject {
+                    framework: detect_framework(&dir),
+                    branch: current_branch(&dir),
+                    owner,
+                    repo,
+                    path: dir.display().to_string(),
+                });
+            }
+        }
+    }
+    projects.sort_by_key(|p| p.repo.to_lowercase());
+    Ok(projects)
+}
+
+/// List a directory within a cloned project (dirs first, then files; `.git`,
+/// `node_modules` and lockfiles are hidden). `subpath` is relative to the root.
+#[tauri::command]
+pub fn read_design_dir(path: String, subpath: String) -> Result<Vec<DesignEntry>, String> {
+    let base = resolve_project_path(&path)?;
+    let dir = if subpath.trim().is_empty() {
+        base.clone()
+    } else {
+        safe_join(&base, &subpath)?
+    };
+    let mut out = Vec::new();
+    for entry in std::fs::read_dir(&dir)
+        .map_err(|e| format!("read dir failed: {e}"))?
+        .flatten()
+    {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if matches!(name.as_str(), ".git" | "node_modules" | ".DS_Store") {
+            continue;
+        }
+        let is_dir = entry.path().is_dir();
+        let rel = if subpath.trim().is_empty() {
+            name.clone()
+        } else {
+            format!("{}/{name}", subpath.trim_end_matches('/'))
+        };
+        out.push(DesignEntry {
+            name,
+            path: rel,
+            is_dir,
+        });
+    }
+    out.sort_by(|a, b| match (a.is_dir, b.is_dir) {
+        (true, false) => std::cmp::Ordering::Less,
+        (false, true) => std::cmp::Ordering::Greater,
+        _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
+    });
+    Ok(out)
+}
+
+/// Read a file within a cloned project (UTF-8, capped at 512 KiB). Binary files
+/// report `binary: true` with empty content.
+#[tauri::command]
+pub fn read_design_file(path: String, subpath: String) -> Result<DesignFileContent, String> {
+    let base = resolve_project_path(&path)?;
+    let file = safe_join(&base, &subpath)?;
+    let bytes = std::fs::read(&file).map_err(|e| format!("read file failed: {e}"))?;
+    let total = bytes.len();
+    let slice = &bytes[..total.min(FILE_READ_CAP)];
+    let binary = slice.contains(&0);
+    let content = if binary {
+        String::new()
+    } else {
+        String::from_utf8_lossy(slice).into_owned()
+    };
+    Ok(DesignFileContent {
+        content,
+        truncated: total > FILE_READ_CAP,
+        bytes: total,
+        binary,
+    })
 }
 
 #[cfg(test)]

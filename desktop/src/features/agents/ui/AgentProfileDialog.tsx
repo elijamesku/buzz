@@ -3,6 +3,8 @@ import { Activity } from "lucide-react";
 
 import { useManagedAgentsQuery } from "@/features/agents/hooks";
 import { useAgentWorking } from "@/features/agents/agentWorkingSignal";
+import { getAgentPerformance } from "@/shared/api/tauriAgentPerformance";
+import type { AgentPerformance } from "@/shared/api/types";
 import { normalizePubkey } from "@/shared/lib/pubkey";
 import { cn } from "@/shared/lib/cn";
 import { Button } from "@/shared/ui/button";
@@ -37,6 +39,21 @@ export function AgentProfileDialog({
 }): React.ReactElement {
   const { data: agents } = useManagedAgentsQuery();
   const work = useAgentWorking(pubkey);
+  const [perf, setPerf] = React.useState<AgentPerformance | null>(null);
+
+  React.useEffect(() => {
+    if (!open) return;
+    let active = true;
+    setPerf(null);
+    void getAgentPerformance(pubkey)
+      .then((result) => {
+        if (active) setPerf(result);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [open, pubkey]);
 
   const agent = React.useMemo(() => {
     const key = normalizePubkey(pubkey);
@@ -78,13 +95,23 @@ export function AgentProfileDialog({
               Performance
             </p>
             <div className="grid grid-cols-2 gap-2">
+              <Stat
+                label="Cost today"
+                value={perf ? `$${perf.costTodayUsd.toFixed(2)}` : "—"}
+              />
+              <Stat
+                label="Tasks done"
+                value={perf ? String(perf.tasks) : "—"}
+              />
+              <Stat
+                label="Tokens"
+                value={perf ? formatCompact(perf.tokensTotal) : "—"}
+              />
               <Stat label="Approval rate" value="—" />
-              <Stat label="Cost today" value="—" />
-              <Stat label="Tasks done" value="—" />
-              <Stat label="Avg response" value="—" />
             </div>
             <p className="mt-2 text-2xs text-muted-foreground/70">
-              Fills in as this agent completes work in the live workspace.
+              From this agent's own signed turn metrics — real usage, never
+              estimated. Approval rate lands once approvals are wired.
             </p>
           </div>
 
@@ -96,6 +123,12 @@ export function AgentProfileDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+function formatCompact(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
+  return String(n);
 }
 
 function Row({

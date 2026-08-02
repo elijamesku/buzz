@@ -658,6 +658,47 @@ pub fn upsert_observer_channel_index(
 /// still need channel attribution attempted. A row is "processed" as soon as
 /// we attempt decryption — whether it succeeds (non-null channel_id written)
 /// or fails (null channel_id written) — so re-runs skip those rows.
+/// Read archived agent-turn-metric rows (kind 44200) as `(agent_pubkey,
+/// payload_json)` pairs. The event author (`ae.pubkey`) is the agent that
+/// published the metric, so this preserves per-agent attribution that the
+/// decrypted payload itself does not carry. Read-only; scoped to the owner's
+/// own `owner_p` metrics for the given relay.
+pub fn read_agent_turn_metrics(
+    conn: &Connection,
+    identity_pubkey: &str,
+    relay_url: &str,
+    limit: i64,
+) -> Result<Vec<(String, String)>, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT ae.pubkey, ae.raw_json \
+             FROM archived_events ae \
+             INNER JOIN archived_event_scopes aes \
+                 ON aes.identity_pubkey = ae.identity_pubkey \
+                AND aes.relay_url       = ae.relay_url \
+                AND aes.id              = ae.id \
+             WHERE ae.identity_pubkey = ?1 \
+               AND ae.relay_url       = ?2 \
+               AND aes.scope_type     = 'owner_p' \
+               AND aes.scope_value    = ?1 \
+               AND ae.kind            = 44200 \
+             ORDER BY ae.created_at DESC \
+             LIMIT ?3",
+        )
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map(
+            rusqlite::params![identity_pubkey, relay_url, limit],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+        )
+        .map_err(|e| e.to_string())?;
+    let mut out = Vec::new();
+    for row in rows {
+        out.push(row.map_err(|e| e.to_string())?);
+    }
+    Ok(out)
+}
+
 pub fn read_unindexed_observer_rows(
     conn: &Connection,
     identity_pubkey: &str,

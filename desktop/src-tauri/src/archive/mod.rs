@@ -674,6 +674,112 @@ pub async fn read_archived_events(
     .await
 }
 
+// ── Agent performance (from archived turn metrics) ───────────────────────────
+
+/// Aggregated, provable performance for one agent, derived from its archived
+/// `kind:44200` turn metrics (real token usage + cost the harness published).
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentPerformance {
+    pub agent_pubkey: String,
+    /// USD cost of turns whose timestamp falls on today (UTC).
+    pub cost_today_usd: f64,
+    /// USD cost across all archived turns.
+    pub cost_total_usd: f64,
+    /// Total tokens across all archived turns.
+    pub tokens_total: u64,
+    /// Number of archived turns.
+    pub turns: u64,
+    /// Distinct sessions — a proxy for tasks worked.
+    pub tasks: u64,
+    /// Most recent turn timestamp (RFC3339), if any.
+    pub last_active: Option<String>,
+    /// Distinct models the agent has run.
+    pub models: Vec<String>,
+}
+
+fn aggregate_agent_performance(
+    rows: &[(String, String)],
+    target_pubkey: &str,
+) -> Result<AgentPerformance, String> {
+    use std::collections::BTreeSet;
+
+    let today = chrono::Utc::now().date_naive();
+    let mut cost_today = 0.0_f64;
+    let mut cost_total = 0.0_f64;
+    let mut tokens_total: u64 = 0;
+    let mut turns: u64 = 0;
+    let mut sessions: BTreeSet<String> = BTreeSet::new();
+    let mut models: BTreeSet<String> = BTreeSet::new();
+    let mut last_active: Option<String> = None;
+
+    for (author, json) in rows {
+        if !author.eq_ignore_ascii_case(target_pubkey) {
+            continue;
+        }
+        let payload: buzz_core_pkg::agent_turn_metric::AgentTurnMetricPayload =
+            match serde_json::from_str(json) {
+                Ok(p) => p,
+                Err(_) => continue,
+            };
+        turns += 1;
+        if let Some(sid) = &payload.session_id {
+            sessions.insert(sid.clone());
+        }
+        if let Some(model) = &payload.model {
+            models.insert(model.clone());
+        }
+        let (cost, tokens) = payload
+            .turn
+            .as_ref()
+            .map(|t| (t.cost_usd.unwrap_or(0.0), t.total_tokens.unwrap_or(0)))
+            .unwrap_or((0.0, 0));
+        cost_total += cost;
+        tokens_total = tokens_total.saturating_add(tokens);
+        if let Ok(ts) = chrono::DateTime::parse_from_rfc3339(&payload.timestamp) {
+            if ts.date_naive() == today {
+                cost_today += cost;
+            }
+        }
+        let is_newer = match &last_active {
+            None => true,
+            Some(cur) => payload.timestamp > *cur,
+        };
+        if is_newer {
+            last_active = Some(payload.timestamp.clone());
+        }
+    }
+
+    Ok(AgentPerformance {
+        agent_pubkey: target_pubkey.to_string(),
+        cost_today_usd: cost_today,
+        cost_total_usd: cost_total,
+        tokens_total,
+        turns,
+        tasks: sessions.len() as u64,
+        last_active,
+        models: models.into_iter().collect(),
+    })
+}
+
+/// Compute an agent's performance from its archived turn metrics. Returns all
+/// zeros when metric archiving is off or the agent has not run — the numbers
+/// are only ever real (published by the harness), never estimated.
+#[tauri::command]
+pub async fn get_agent_performance(
+    state: State<'_, AppState>,
+    pubkey: String,
+) -> Result<AgentPerformance, String> {
+    let identity_pk = identity_pubkey(&state)?;
+    let relay_url = relay_ws_url_with_override(&state);
+    let target = pubkey.trim().to_lowercase();
+    run_archive_db_task(move |conn| {
+        let rows = store::read_agent_turn_metrics(conn, &identity_pk, &relay_url, 20_000)?;
+        aggregate_agent_performance(&rows, &target)
+    })
+    .await
+}
+
 // ── Tests ────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]

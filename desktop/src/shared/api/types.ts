@@ -1065,6 +1065,26 @@ export type GithubPollResult = {
   warnings: string[];
 };
 
+// ── Agent performance ─────────────────────────────────────────────────────────
+
+/**
+ * An agent's provable performance, aggregated from its archived turn metrics
+ * (kind 44200 — real token usage + cost the harness published). All zeros when
+ * metric archiving is off or the agent hasn't run. Mirrors Rust
+ * `AgentPerformance`.
+ */
+export type AgentPerformance = {
+  agentPubkey: string;
+  costTodayUsd: number;
+  costTotalUsd: number;
+  tokensTotal: number;
+  turns: number;
+  /** Distinct sessions — a proxy for tasks worked. */
+  tasks: number;
+  lastActive: string | null;
+  models: string[];
+};
+
 // ── Design workspace ──────────────────────────────────────────────────────────
 
 /**
