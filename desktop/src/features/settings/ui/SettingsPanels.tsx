@@ -14,6 +14,7 @@ import {
   MessagesSquare,
   MonitorCog,
   Moon,
+  PenTool,
   Plug,
   ShieldAlert,
   Smartphone,
@@ -72,6 +73,7 @@ import {
 } from "@/shared/theme/useThemePreviewVars";
 import { ChannelTemplatesSettingsCard } from "./ChannelTemplatesSettingsCard";
 import { HarnessesSettingsPanel } from "./HarnessesSettingsPanel";
+import { DesignSettingsPanel } from "./DesignSettingsPanel";
 import { IntegrationsSettingsPanel } from "./IntegrationsSettingsPanel";
 import { ExperimentalFeaturesCard } from "./ExperimentalFeaturesCard";
 import { KeyboardShortcutsCard } from "./KeyboardShortcutsCard";
@@ -95,6 +97,7 @@ export type SettingsSection =
   | "experimental"
   | "agents"
   | "integrations"
+  | "design"
   | "channel-templates"
   | "compute"
   | "appearance"
@@ -116,6 +119,7 @@ const SETTINGS_SECTION_VALUES: readonly SettingsSection[] = [
   "experimental",
   "agents",
   "integrations",
+  "design",
   "channel-templates",
   "compute",
   "appearance",
@@ -195,6 +199,11 @@ export const settingsSections: SettingsSectionDescriptor[] = [
     value: "integrations",
     label: "Integrations",
     icon: Plug,
+  },
+  {
+    value: "design",
+    label: "Design",
+    icon: PenTool,
   },
   {
     value: "channel-templates",
@@ -839,6 +848,8 @@ export function renderSettingsSection(
       );
     case "integrations":
       return <IntegrationsSettingsPanel />;
+    case "design":
+      return <DesignSettingsPanel />;
     case "channel-templates":
       return <ChannelTemplatesSettingsCard />;
     case "compute":

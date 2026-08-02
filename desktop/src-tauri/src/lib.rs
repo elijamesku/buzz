@@ -821,6 +821,7 @@ pub fn run() {
             put_agent_session_config,
             get_global_agent_config,
             set_global_agent_config,
+            import_website,
             github_default_client_id,
             github_device_start,
             github_device_poll,

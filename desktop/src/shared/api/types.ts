@@ -1065,6 +1065,31 @@ export type GithubPollResult = {
   warnings: string[];
 };
 
+// ── Website import (Design) ───────────────────────────────────────────────────
+
+/** A single captured page from a website import. Mirrors Rust `ImportedPage`. */
+export type ImportedPage = {
+  url: string;
+  /** Path relative to the import destination, e.g. `pages/index.html`. */
+  path: string;
+  bytes: number;
+};
+
+/**
+ * Result of `import_website` — what was captured and where.
+ *
+ * Mirrors the Rust `SiteImportResult` struct.
+ */
+export type SiteImportResult = {
+  /** Absolute path to the import workspace directory. */
+  destination: string;
+  host: string;
+  pages: ImportedPage[];
+  assetCount: number;
+  /** Non-fatal issues (skipped/failed pages or assets). */
+  warnings: string[];
+};
+
 /**
  * Current GitHub connection state (never carries token material).
  *
