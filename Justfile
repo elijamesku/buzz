@@ -44,6 +44,11 @@ bootstrap:
         echo "Created .env from .env.example — review it before running just dev."
     fi
 
+# One command for newcomers: install/start Docker if needed, then set up
+# services + migrations + deps. Safe to re-run. Then run `just dev`.
+quickstart:
+    ./scripts/quickstart.sh
+
 # Start Docker services, run migrations, install desktop deps
 setup: bootstrap
     ./scripts/dev-setup.sh

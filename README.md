@@ -156,10 +156,20 @@ See **Quick start** below — this is the developer / self-host path.
 
 You'll need [Docker](https://docs.docker.com/get-docker/) and [Hermit](https://cashapp.github.io/hermit/) (or Rust 1.88+, Node 24+, pnpm 10+, `just`).
 
-**Once:**
+**Fastest path (new here):**
 ```bash
 git clone https://github.com/block/buzz.git && cd buzz
 . ./bin/activate-hermit   # pinned toolchain (tools auto-download on first use)
+just quickstart           # installs/starts Docker if needed, then sets everything up
+just dev                  # relay + desktop app
+```
+
+`just quickstart` is the one-command onboarding: it makes sure Docker is
+installed and running (offering to install it for you), then runs the standard
+setup below. Safe to re-run.
+
+**Or the explicit steps (Docker already installed):**
+```bash
 just setup && just build
 ```
 
