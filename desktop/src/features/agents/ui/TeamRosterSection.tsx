@@ -1,10 +1,11 @@
 import * as React from "react";
-import { ChevronRight } from "lucide-react";
+import { Activity, ChevronRight } from "lucide-react";
 
 import {
   useManagedAgentsQuery,
   usePersonasQuery,
 } from "@/features/agents/hooks";
+import { useOpenAgentActivity } from "@/features/agents/useOpenAgentActivity";
 import type { AgentPersona, ManagedAgent } from "@/shared/api/types";
 import { cn } from "@/shared/lib/cn";
 import { UserAvatar } from "@/shared/ui/UserAvatar";
@@ -73,6 +74,7 @@ function buildRoster(
 export function TeamRosterSection(): React.ReactElement | null {
   const { data: agents } = useManagedAgentsQuery();
   const { data: personas } = usePersonasQuery();
+  const { openAgentActivity } = useOpenAgentActivity();
   const [collapsed, setCollapsed] = React.useState(false);
 
   const roster = React.useMemo(
@@ -103,7 +105,13 @@ export function TeamRosterSection(): React.ReactElement | null {
         <ul className="mt-0.5 space-y-0.5">
           {roster.map((entry) => (
             <li key={entry.pubkey}>
-              <div className="flex items-start gap-2 rounded-md px-1.5 py-1.5">
+              <button
+                type="button"
+                onClick={() => openAgentActivity(entry.pubkey)}
+                title={`See what ${entry.name} is working on`}
+                className="flex w-full items-start gap-2 rounded-md px-1.5 py-1.5 text-left transition-colors hover:bg-sidebar-border/35 focus-visible:bg-sidebar-border/35 focus-visible:outline-none"
+                data-testid={`team-roster-agent-${entry.pubkey}`}
+              >
                 <UserAvatar
                   avatarUrl={entry.avatarUrl}
                   displayName={entry.name}
@@ -123,7 +131,8 @@ export function TeamRosterSection(): React.ReactElement | null {
                     </p>
                   ) : null}
                 </div>
-              </div>
+                <Activity className="mt-1 size-3.5 shrink-0 text-sidebar-foreground/0 transition-colors group-hover/team:text-sidebar-foreground/40" />
+              </button>
             </li>
           ))}
         </ul>
