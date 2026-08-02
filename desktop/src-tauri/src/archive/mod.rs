@@ -699,9 +699,9 @@ pub struct AgentPerformance {
 }
 
 fn aggregate_agent_performance(
-    rows: &[(String, String)],
     target_pubkey: &str,
-) -> Result<AgentPerformance, String> {
+    payloads: &[buzz_core_pkg::agent_turn_metric::AgentTurnMetricPayload],
+) -> AgentPerformance {
     use std::collections::BTreeSet;
 
     let today = chrono::Utc::now().date_naive();
@@ -713,15 +713,7 @@ fn aggregate_agent_performance(
     let mut models: BTreeSet<String> = BTreeSet::new();
     let mut last_active: Option<String> = None;
 
-    for (author, json) in rows {
-        if !author.eq_ignore_ascii_case(target_pubkey) {
-            continue;
-        }
-        let payload: buzz_core_pkg::agent_turn_metric::AgentTurnMetricPayload =
-            match serde_json::from_str(json) {
-                Ok(p) => p,
-                Err(_) => continue,
-            };
+    for payload in payloads {
         turns += 1;
         if let Some(sid) = &payload.session_id {
             sessions.insert(sid.clone());
@@ -750,7 +742,7 @@ fn aggregate_agent_performance(
         }
     }
 
-    Ok(AgentPerformance {
+    AgentPerformance {
         agent_pubkey: target_pubkey.to_string(),
         cost_today_usd: cost_today,
         cost_total_usd: cost_total,
@@ -759,25 +751,36 @@ fn aggregate_agent_performance(
         tasks: sessions.len() as u64,
         last_active,
         models: models.into_iter().collect(),
-    })
+    }
 }
 
-/// Compute an agent's performance from its archived turn metrics. Returns all
-/// zeros when metric archiving is off or the agent has not run — the numbers
-/// are only ever real (published by the harness), never estimated.
+/// Compute an agent's performance from its `kind:44200` turn metrics, read live
+/// from the relay (the metrics are encrypted to the owner and decrypted here).
+/// Works whether or not local metric archiving is enabled. Real numbers or
+/// zero — never estimated.
 #[tauri::command]
 pub async fn get_agent_performance(
     state: State<'_, AppState>,
     pubkey: String,
 ) -> Result<AgentPerformance, String> {
-    let identity_pk = identity_pubkey(&state)?;
-    let relay_url = relay_ws_url_with_override(&state);
     let target = pubkey.trim().to_lowercase();
-    run_archive_db_task(move |conn| {
-        let rows = store::read_agent_turn_metrics(conn, &identity_pk, &relay_url, 20_000)?;
-        aggregate_agent_performance(&rows, &target)
-    })
-    .await
+    let owner_keys = state.keys.lock().map_err(|e| e.to_string())?.clone();
+    let events = query_relay(
+        &state,
+        &[serde_json::json!({
+            "kinds": [44200],
+            "authors": [target],
+            "limit": 1000,
+        })],
+    )
+    .await?;
+    let payloads: Vec<buzz_core_pkg::agent_turn_metric::AgentTurnMetricPayload> = events
+        .iter()
+        .filter_map(|event| {
+            buzz_core_pkg::agent_turn_metric::decrypt_agent_turn_metric(&owner_keys, event).ok()
+        })
+        .collect();
+    Ok(aggregate_agent_performance(&target, &payloads))
 }
 
 // ── Tests ────────────────────────────────────────────────────────────────────

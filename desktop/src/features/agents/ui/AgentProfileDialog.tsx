@@ -1,7 +1,10 @@
 import * as React from "react";
 import { Activity } from "lucide-react";
 
-import { useManagedAgentsQuery } from "@/features/agents/hooks";
+import {
+  useManagedAgentsQuery,
+  usePersonasQuery,
+} from "@/features/agents/hooks";
 import { useAgentWorking } from "@/features/agents/agentWorkingSignal";
 import { getAgentPerformance } from "@/shared/api/tauriAgentPerformance";
 import type { AgentPerformance } from "@/shared/api/types";
@@ -38,6 +41,7 @@ export function AgentProfileDialog({
   pubkey: string;
 }): React.ReactElement {
   const { data: agents } = useManagedAgentsQuery();
+  const { data: personas } = usePersonasQuery();
   const work = useAgentWorking(pubkey);
   const [perf, setPerf] = React.useState<AgentPerformance | null>(null);
 
@@ -59,6 +63,19 @@ export function AgentProfileDialog({
     const key = normalizePubkey(pubkey);
     return agents?.find((a) => normalizePubkey(a.pubkey) === key) ?? null;
   }, [agents, pubkey]);
+
+  // Persona-linked agents leave model/provider/runtime null on the record and
+  // inherit them from the persona — fall back so the card shows real config.
+  const persona = React.useMemo(
+    () =>
+      agent?.personaId
+        ? (personas?.find((p) => p.id === agent.personaId) ?? null)
+        : null,
+    [personas, agent?.personaId],
+  );
+  const model = agent?.model ?? persona?.model ?? "—";
+  const provider = agent?.provider ?? persona?.provider ?? "—";
+  const runtime = agent?.runtime ?? persona?.runtime ?? "—";
 
   const status: { label: string; tone: "working" | "available" | "idle" } =
     work.working
@@ -83,9 +100,9 @@ export function AgentProfileDialog({
         <div className="space-y-4">
           {/* Config */}
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
-            <Row label="Model" value={agent?.model ?? "—"} />
-            <Row label="Provider" value={agent?.provider ?? "—"} />
-            <Row label="Runtime" value={agent?.runtime ?? "—"} />
+            <Row label="Model" value={model} />
+            <Row label="Provider" value={provider} />
+            <Row label="Runtime" value={runtime} />
             <Row label="Tools" value={agent?.mcpCommand?.trim() || "default"} />
           </dl>
 
