@@ -114,28 +114,25 @@ export function AgentProfileDialog({
             {perf && perf.turns > 0 ? (
               <>
                 <div className="grid grid-cols-2 gap-2">
-                  <Stat
-                    label="Cost today"
-                    value={`$${perf.costTodayUsd.toFixed(2)}`}
-                  />
                   <Stat label="Tasks done" value={String(perf.tasks)} />
-                  <Stat
-                    label="Tokens"
-                    value={formatCompact(perf.tokensTotal)}
-                  />
+                  <Stat label="Turns" value={formatCompact(perf.turns)} />
                   <Stat label="Approval rate" value="—" />
+                  <Stat
+                    label="Last active"
+                    value={formatWhen(perf.lastActive)}
+                  />
                 </div>
                 <p className="mt-2 text-2xs text-muted-foreground/70">
-                  From this agent's own signed turn metrics — real usage, never
-                  estimated. Approval rate lands once approvals are wired.
+                  From this agent's own signed turn metrics. Approval rate lands
+                  once approvals are wired.
                 </p>
               </>
             ) : (
               <div className="rounded-2xl border border-dashed border-border/70 bg-muted/30 px-4 py-6 text-center">
                 <p className="text-sm text-muted-foreground">No activity yet</p>
                 <p className="mt-1 text-2xs text-muted-foreground/70">
-                  Cost, tokens, and tasks appear here from this agent's signed
-                  turn metrics once it works in the live workspace.
+                  Tasks and activity appear here from this agent's signed turn
+                  metrics once it works in the live workspace.
                 </p>
               </div>
             )}
@@ -155,6 +152,13 @@ function formatCompact(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
   return String(n);
+}
+
+function formatWhen(iso: string | null): string {
+  if (!iso) return "—";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
 function Row({
