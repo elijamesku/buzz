@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Activity } from "lucide-react";
 
 import {
@@ -8,7 +9,6 @@ import {
 } from "@/features/agents/hooks";
 import { useAgentWorking } from "@/features/agents/agentWorkingSignal";
 import { getAgentPerformance } from "@/shared/api/tauriAgentPerformance";
-import type { AgentPerformance } from "@/shared/api/types";
 import { normalizePubkey } from "@/shared/lib/pubkey";
 import { cn } from "@/shared/lib/cn";
 import { Button } from "@/shared/ui/button";
@@ -44,21 +44,14 @@ export function AgentProfileDialog({
   const { data: agents } = useManagedAgentsQuery();
   const { data: personas } = usePersonasQuery();
   const work = useAgentWorking(pubkey);
-  const [perf, setPerf] = React.useState<AgentPerformance | null>(null);
-
-  React.useEffect(() => {
-    if (!open) return;
-    let active = true;
-    setPerf(null);
-    void getAgentPerformance(pubkey)
-      .then((result) => {
-        if (active) setPerf(result);
-      })
-      .catch(() => {});
-    return () => {
-      active = false;
-    };
-  }, [open, pubkey]);
+  // Poll while open so the card updates live as the agent works.
+  const { data: perf } = useQuery({
+    queryKey: ["agent-performance", pubkey],
+    queryFn: () => getAgentPerformance(pubkey),
+    enabled: open,
+    refetchInterval: open ? 8_000 : false,
+    staleTime: 4_000,
+  });
 
   const agent = React.useMemo(() => {
     const key = normalizePubkey(pubkey);
