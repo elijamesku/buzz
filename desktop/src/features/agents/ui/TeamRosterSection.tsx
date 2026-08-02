@@ -6,6 +6,7 @@ import {
   usePersonasQuery,
 } from "@/features/agents/hooks";
 import { useOpenAgentActivity } from "@/features/agents/useOpenAgentActivity";
+import { useAgentWorking } from "@/features/agents/agentWorkingSignal";
 import type { AgentPersona, ManagedAgent } from "@/shared/api/types";
 import { cn } from "@/shared/lib/cn";
 import { UserAvatar } from "@/shared/ui/UserAvatar";
@@ -104,39 +105,65 @@ export function TeamRosterSection(): React.ReactElement | null {
       {!collapsed ? (
         <ul className="mt-0.5 space-y-0.5">
           {roster.map((entry) => (
-            <li key={entry.pubkey}>
-              <button
-                type="button"
-                onClick={() => openAgentActivity(entry.pubkey)}
-                title={`See what ${entry.name} is working on`}
-                className="flex w-full items-start gap-2 rounded-md px-1.5 py-1.5 text-left transition-colors hover:bg-sidebar-border/35 focus-visible:bg-sidebar-border/35 focus-visible:outline-none"
-                data-testid={`team-roster-agent-${entry.pubkey}`}
-              >
-                <UserAvatar
-                  avatarUrl={entry.avatarUrl}
-                  displayName={entry.name}
-                  size="sm"
-                  className="mt-0.5"
-                />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-sidebar-foreground">
-                    {entry.name}
-                  </p>
-                  {entry.tagline ? (
-                    <p
-                      className="mt-0.5 line-clamp-2 text-2xs leading-snug text-sidebar-foreground/60"
-                      title={entry.tagline}
-                    >
-                      {entry.tagline}
-                    </p>
-                  ) : null}
-                </div>
-                <Activity className="mt-1 size-3.5 shrink-0 text-sidebar-foreground/0 transition-colors group-hover/team:text-sidebar-foreground/40" />
-              </button>
-            </li>
+            <TeamRosterRow
+              key={entry.pubkey}
+              entry={entry}
+              onOpen={openAgentActivity}
+            />
           ))}
         </ul>
       ) : null}
     </div>
+  );
+}
+
+function TeamRosterRow({
+  entry,
+  onOpen,
+}: {
+  entry: RosterEntry;
+  onOpen: (pubkey: string) => void;
+}): React.ReactElement {
+  const work = useAgentWorking(entry.pubkey);
+
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={() => onOpen(entry.pubkey)}
+        title={`See what ${entry.name} is working on`}
+        className="flex w-full items-start gap-2 rounded-md px-1.5 py-1.5 text-left transition-colors hover:bg-sidebar-border/35 focus-visible:bg-sidebar-border/35 focus-visible:outline-none"
+        data-testid={`team-roster-agent-${entry.pubkey}`}
+      >
+        <UserAvatar
+          avatarUrl={entry.avatarUrl}
+          displayName={entry.name}
+          size="sm"
+          className="mt-0.5"
+        />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium text-sidebar-foreground">
+            {entry.name}
+          </p>
+          {work.working ? (
+            <span className="mt-0.5 flex items-center gap-1.5 text-2xs text-emerald-600">
+              <span className="relative flex size-1.5 shrink-0">
+                <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-500/70" />
+                <span className="relative inline-flex size-1.5 rounded-full bg-emerald-500" />
+              </span>
+              <span className="truncate">Working…</span>
+            </span>
+          ) : entry.tagline ? (
+            <p
+              className="mt-0.5 line-clamp-2 text-2xs leading-snug text-sidebar-foreground/60"
+              title={entry.tagline}
+            >
+              {entry.tagline}
+            </p>
+          ) : null}
+        </div>
+        <Activity className="mt-1 size-3.5 shrink-0 text-sidebar-foreground/0 transition-colors group-hover/team:text-sidebar-foreground/40" />
+      </button>
+    </li>
   );
 }
