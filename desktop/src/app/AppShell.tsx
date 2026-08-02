@@ -2,6 +2,7 @@ import * as React from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Outlet, useLocation } from "@tanstack/react-router";
 import { DesignLauncher } from "@/features/design/ui/DesignLauncher";
+import { WorkforcePulseLauncher } from "@/features/agents/ui/WorkforcePulseLauncher";
 import { deriveShellRoute } from "@/app/AppShell.helpers";
 import { AppShellProvider } from "@/app/AppShellContext";
 import * as BuzzTheme from "@/app/BuzzThemeSurfaces";
@@ -750,6 +751,7 @@ export function AppShell() {
                 >
                   <BuzzTheme.GradientLayer />
                   <DesignLauncher hidden={settingsOpen} />
+                  <WorkforcePulseLauncher hidden={settingsOpen} />
                   {hasCommunityRail ? (
                     <CommunityRail
                       activeCommunityId={
