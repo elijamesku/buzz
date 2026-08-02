@@ -6,6 +6,7 @@ import {
   useAgentConfigSurface,
   useManagedAgentsQuery,
   usePersonasQuery,
+  useUpdateManagedAgentMutation,
 } from "@/features/agents/hooks";
 import { useAgentWorking } from "@/features/agents/agentWorkingSignal";
 import { getAgentPerformance } from "@/shared/api/tauriAgentPerformance";
@@ -26,28 +27,34 @@ const AUTONOMY_OPTIONS: { value: Autonomy; label: string; blurb: string }[] = [
   {
     value: "ask",
     label: "Ask first",
-    blurb: "Approve every action before it runs.",
+    blurb: "Requests permission for every tool call.",
   },
   {
     value: "trusted",
     label: "Trusted",
-    blurb: "Auto-approve routine work; ask on risky moves.",
+    blurb: "Auto-approves file edits; asks for other tools.",
   },
   {
     value: "autonomous",
     label: "Autonomous",
-    blurb: "Acts on its own — revoke anytime.",
+    blurb: "Skips the permission flow — acts on its own.",
   },
 ];
 
-function autonomyStorageKey(pubkey: string): string {
-  return `buzz.agent.autonomy.${pubkey}`;
-}
-
-function readAutonomy(pubkey: string): Autonomy {
-  const value = localStorage.getItem(autonomyStorageKey(pubkey));
-  return value === "trusted" || value === "autonomous" ? value : "ask";
-}
+// Trust is the agent's real spawn-time permission mode
+// (BUZZ_ACP_PERMISSION_MODE, read by the ACP harness). Not reserved, so it
+// rides the agent's per-agent env vars.
+const PERMISSION_ENV_KEY = "BUZZ_ACP_PERMISSION_MODE";
+const AUTONOMY_TO_MODE: Record<Autonomy, string> = {
+  ask: "default",
+  trusted: "acceptEdits",
+  autonomous: "bypassPermissions",
+};
+const MODE_TO_AUTONOMY: Record<string, Autonomy> = {
+  default: "ask",
+  acceptEdits: "trusted",
+  bypassPermissions: "autonomous",
+};
 
 /**
  * An agent's "coworker profile": identity + config now, and a performance card
@@ -120,13 +127,22 @@ export function AgentProfileDialog({
         ? { label: "Available", tone: "available" }
         : { label: "Idle", tone: "idle" };
 
-  const [autonomy, setAutonomy] = React.useState<Autonomy>("ask");
-  React.useEffect(() => {
-    if (open) setAutonomy(readAutonomy(pubkey));
-  }, [open, pubkey]);
+  // Trust reflects the agent's real permission mode; unset = the harness
+  // default (bypassPermissions = autonomous).
+  const updateAgent = useUpdateManagedAgentMutation();
+  const currentMode = agent?.envVars?.[PERMISSION_ENV_KEY];
+  const autonomy: Autonomy = currentMode
+    ? (MODE_TO_AUTONOMY[currentMode] ?? "autonomous")
+    : "autonomous";
   const changeAutonomy = (level: Autonomy) => {
-    setAutonomy(level);
-    localStorage.setItem(autonomyStorageKey(pubkey), level);
+    if (!agent) return;
+    updateAgent.mutate({
+      pubkey: agent.pubkey,
+      envVars: {
+        ...agent.envVars,
+        [PERMISSION_ENV_KEY]: AUTONOMY_TO_MODE[level],
+      },
+    });
   };
 
   return (
@@ -161,9 +177,10 @@ export function AgentProfileDialog({
                 <button
                   key={opt.value}
                   type="button"
+                  disabled={!agent || updateAgent.isPending}
                   onClick={() => changeAutonomy(opt.value)}
                   className={cn(
-                    "rounded-xl border px-2 py-2 text-2xs font-medium transition-colors",
+                    "rounded-xl border px-2 py-2 text-2xs font-medium transition-colors disabled:opacity-50",
                     autonomy === opt.value
                       ? "border-primary bg-primary/10 text-foreground"
                       : "border-border/70 text-muted-foreground hover:text-foreground",
@@ -174,8 +191,8 @@ export function AgentProfileDialog({
               ))}
             </div>
             <p className="mt-2 text-2xs text-muted-foreground/70">
-              {AUTONOMY_OPTIONS.find((o) => o.value === autonomy)?.blurb} Agents
-              earn higher trust automatically as their approval rate proves out.
+              {AUTONOMY_OPTIONS.find((o) => o.value === autonomy)?.blurb} Sets
+              the agent's permission mode; applies on its next restart.
             </p>
           </div>
 
