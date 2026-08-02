@@ -7,6 +7,7 @@ import {
 } from "@/features/agents/hooks";
 import type { AgentPersona, ManagedAgent } from "@/shared/api/types";
 import { cn } from "@/shared/lib/cn";
+import { UserAvatar } from "@/shared/ui/UserAvatar";
 
 /**
  * One-line "what I do / when to bring me in" blurbs for the built-in team,
@@ -103,7 +104,12 @@ export function TeamRosterSection(): React.ReactElement | null {
           {roster.map((entry) => (
             <li key={entry.pubkey}>
               <div className="flex items-start gap-2 rounded-md px-1.5 py-1.5">
-                <RosterAvatar name={entry.name} avatarUrl={entry.avatarUrl} />
+                <UserAvatar
+                  avatarUrl={entry.avatarUrl}
+                  displayName={entry.name}
+                  size="sm"
+                  className="mt-0.5"
+                />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-sidebar-foreground">
                     {entry.name}
@@ -123,33 +129,5 @@ export function TeamRosterSection(): React.ReactElement | null {
         </ul>
       ) : null}
     </div>
-  );
-}
-
-function RosterAvatar({
-  name,
-  avatarUrl,
-}: {
-  name: string;
-  avatarUrl: string | null;
-}): React.ReactElement {
-  const [broken, setBroken] = React.useState(false);
-  const initial = name.trim().charAt(0).toUpperCase() || "?";
-
-  if (avatarUrl && !broken) {
-    return (
-      <img
-        src={avatarUrl}
-        alt=""
-        className="mt-0.5 size-6 shrink-0 rounded-full object-cover"
-        onError={() => setBroken(true)}
-      />
-    );
-  }
-
-  return (
-    <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-sidebar-accent text-2xs font-semibold text-sidebar-accent-foreground">
-      {initial}
-    </span>
   );
 }
