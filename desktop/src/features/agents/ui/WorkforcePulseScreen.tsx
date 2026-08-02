@@ -1,5 +1,5 @@
 import * as React from "react";
-import { X } from "lucide-react";
+import { Hash, X } from "lucide-react";
 
 import {
   useManagedAgentsQuery,
@@ -9,8 +9,10 @@ import {
   getAgentWorkingState,
   subscribeAgentWorkingSignal,
   useAgentWorking,
+  useWorkingChannels,
 } from "@/features/agents/agentWorkingSignal";
 import { AgentProfileDialog } from "@/features/agents/ui/AgentProfileDialog";
+import { useChannelsQuery } from "@/features/channels/hooks";
 import type { AgentPersona, ManagedAgent } from "@/shared/api/types";
 import { cn } from "@/shared/lib/cn";
 import { Button } from "@/shared/ui/button";
@@ -49,7 +51,14 @@ export function WorkforcePulseScreen({
 }): React.ReactElement {
   const { data: agents } = useManagedAgentsQuery();
   const { data: personas } = usePersonasQuery();
+  const { data: channels } = useChannelsQuery();
+  const workingChannels = useWorkingChannels();
   const [selected, setSelected] = React.useState<Entry | null>(null);
+
+  const channelNameById = React.useMemo(
+    () => new Map((channels ?? []).map((c) => [c.id, c.name])),
+    [channels],
+  );
 
   const roster = React.useMemo(
     () => buildRoster(agents ?? [], personas ?? []),
@@ -92,6 +101,31 @@ export function WorkforcePulseScreen({
       </header>
 
       <div className="flex-1 px-6 py-6">
+        {workingChannels.length > 0 ? (
+          <div className="mb-6">
+            <p className="mb-2 text-xs font-medium text-muted-foreground">
+              Active rooms
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {workingChannels.map((room) => (
+                <div
+                  key={room.channelId}
+                  className="flex items-center gap-2 rounded-full border border-emerald-500/40 bg-emerald-500/5 px-3 py-1.5 text-sm"
+                >
+                  <Hash className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
+                  <span className="font-medium text-foreground">
+                    {channelNameById.get(room.channelId) ?? "room"}
+                  </span>
+                  <span className="text-2xs text-muted-foreground">
+                    {(room.agentNames ?? []).join(", ") ||
+                      `${room.agentCount} working`}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
         {roster.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             No agents yet. Add a team and they'll show up here, live.
