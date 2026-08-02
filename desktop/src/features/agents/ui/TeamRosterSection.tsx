@@ -7,6 +7,7 @@ import {
 } from "@/features/agents/hooks";
 import { useOpenAgentActivity } from "@/features/agents/useOpenAgentActivity";
 import { useAgentWorking } from "@/features/agents/agentWorkingSignal";
+import { AgentProfileDialog } from "@/features/agents/ui/AgentProfileDialog";
 import type { AgentPersona, ManagedAgent } from "@/shared/api/types";
 import { cn } from "@/shared/lib/cn";
 import { UserAvatar } from "@/shared/ui/UserAvatar";
@@ -125,13 +126,25 @@ function TeamRosterRow({
   onOpen: (pubkey: string) => void;
 }): React.ReactElement {
   const work = useAgentWorking(entry.pubkey);
+  const [profileOpen, setProfileOpen] = React.useState(false);
 
   return (
     <li>
+      <AgentProfileDialog
+        avatarUrl={entry.avatarUrl}
+        name={entry.name}
+        onOpenChange={setProfileOpen}
+        onViewActivity={() => {
+          setProfileOpen(false);
+          onOpen(entry.pubkey);
+        }}
+        open={profileOpen}
+        pubkey={entry.pubkey}
+      />
       <button
         type="button"
-        onClick={() => onOpen(entry.pubkey)}
-        title={`See what ${entry.name} is working on`}
+        onClick={() => setProfileOpen(true)}
+        title={`Open ${entry.name}'s profile`}
         className="flex w-full items-start gap-2 rounded-md px-1.5 py-1.5 text-left transition-colors hover:bg-sidebar-border/35 focus-visible:bg-sidebar-border/35 focus-visible:outline-none"
         data-testid={`team-roster-agent-${entry.pubkey}`}
       >
