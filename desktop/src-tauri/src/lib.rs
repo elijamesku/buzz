@@ -822,6 +822,8 @@ pub fn run() {
             get_global_agent_config,
             set_global_agent_config,
             import_website,
+            local_stack_status,
+            start_local_services,
             clone_design_repo,
             list_design_projects,
             read_design_dir,

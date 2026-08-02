@@ -1065,6 +1065,22 @@ export type GithubPollResult = {
   warnings: string[];
 };
 
+// ── Local backend setup ───────────────────────────────────────────────────────
+
+/**
+ * Readiness of the local relay backend, one field per setup step. Mirrors the
+ * Rust `LocalStackStatus`. `repoAvailable` is false in a packaged app (no
+ * source checkout), which means "join a hosted relay" rather than self-host.
+ */
+export type LocalStackStatus = {
+  repoAvailable: boolean;
+  dockerInstalled: boolean;
+  dockerRunning: boolean;
+  servicesUp: boolean;
+  relayReachable: boolean;
+  repoPath: string | null;
+};
+
 // ── Agent performance ─────────────────────────────────────────────────────────
 
 /**

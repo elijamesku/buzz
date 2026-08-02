@@ -15,6 +15,7 @@ import {
   MonitorCog,
   Moon,
   Plug,
+  Server,
   ShieldAlert,
   Smartphone,
   Smile,
@@ -73,6 +74,7 @@ import {
 import { ChannelTemplatesSettingsCard } from "./ChannelTemplatesSettingsCard";
 import { HarnessesSettingsPanel } from "./HarnessesSettingsPanel";
 import { IntegrationsSettingsPanel } from "./IntegrationsSettingsPanel";
+import { LocalSetupSettingsPanel } from "./LocalSetupSettingsPanel";
 import { ExperimentalFeaturesCard } from "./ExperimentalFeaturesCard";
 import { KeyboardShortcutsCard } from "./KeyboardShortcutsCard";
 import { MeshComputeSettingsCard } from "@/features/mesh-compute/ui/MeshComputeSettingsCard";
@@ -95,6 +97,7 @@ export type SettingsSection =
   | "experimental"
   | "agents"
   | "integrations"
+  | "local-setup"
   | "channel-templates"
   | "compute"
   | "appearance"
@@ -116,6 +119,7 @@ const SETTINGS_SECTION_VALUES: readonly SettingsSection[] = [
   "experimental",
   "agents",
   "integrations",
+  "local-setup",
   "channel-templates",
   "compute",
   "appearance",
@@ -195,6 +199,11 @@ export const settingsSections: SettingsSectionDescriptor[] = [
     value: "integrations",
     label: "Integrations",
     icon: Plug,
+  },
+  {
+    value: "local-setup",
+    label: "Local setup",
+    icon: Server,
   },
   {
     value: "channel-templates",
@@ -839,6 +848,8 @@ export function renderSettingsSection(
       );
     case "integrations":
       return <IntegrationsSettingsPanel />;
+    case "local-setup":
+      return <LocalSetupSettingsPanel />;
     case "channel-templates":
       return <ChannelTemplatesSettingsCard />;
     case "compute":

@@ -73,6 +73,7 @@ const settingsNavGroups: Array<{
     sections: [
       "agents",
       "integrations",
+      "local-setup",
       "compute",
       "experimental",
       "mobile",
