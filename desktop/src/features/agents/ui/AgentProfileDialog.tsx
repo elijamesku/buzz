@@ -2,6 +2,7 @@ import * as React from "react";
 import { Activity } from "lucide-react";
 
 import {
+  useAgentConfigSurface,
   useManagedAgentsQuery,
   usePersonasQuery,
 } from "@/features/agents/hooks";
@@ -73,9 +74,22 @@ export function AgentProfileDialog({
         : null,
     [personas, agent?.personaId],
   );
-  const model = agent?.model ?? persona?.model ?? "—";
-  const provider = agent?.provider ?? persona?.provider ?? "—";
-  const runtime = agent?.runtime ?? persona?.runtime ?? "—";
+  // The resolved/effective config is the real answer (record + persona +
+  // global + env), since persona-backed agents leave the record fields null.
+  const { data: surface } = useAgentConfigSurface(open ? pubkey : null);
+  const model =
+    surface?.normalized.model?.value ?? agent?.model ?? persona?.model ?? "—";
+  const provider =
+    surface?.normalized.provider?.value ??
+    agent?.provider ??
+    persona?.provider ??
+    "—";
+  const runtime =
+    surface?.runtimeLabel ??
+    surface?.runtimeId ??
+    agent?.runtime ??
+    persona?.runtime ??
+    "—";
 
   const status: { label: string; tone: "working" | "available" | "idle" } =
     work.working
