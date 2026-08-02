@@ -107,11 +107,27 @@ your relay → they're in.** No Docker, no commands.
 | Bake default relay into the app | ✅ `build.rs` (`BUZZ_RELAY_URL`, `…AUTO_CONNECT_DEFAULT_RELAY`) |
 | Signed/notarized desktop build | ✅ `just release-desktop` (needs *your* Apple cert) |
 | In-app self-host helper (buttons) | ✅ Settings → Local setup |
+| **Fork CI release workflow** | ✅ `.github/workflows/fork-release-desktop.yml` (unsigned now, auto-signs when you add Apple secrets) |
 | **A VPS + domain** | ⬜ you |
-| **Apple Developer account + cert** | ⬜ you |
-| **CI workflow for signed downloads** | ⬜ optional — the repo's `signed-macos-canary.yml` uses Block's internal signer; a fork one using standard Apple secrets can be added |
+| **Apple Developer account + cert** | ⬜ you (add later — unsigned builds work until then) |
 
-> The repo's `signed-macos-canary.yml` signs via Block's internal service
-> (`OSX_CODESIGN_ROLE` / `CODESIGN_S3_BUCKET`), which your fork can't use. Sign
-> locally with `just release-desktop` (above), or add a fork CI workflow that
-> uses standard Apple certificate secrets — ask and it can be scaffolded.
+## CI path (recommended over local builds)
+
+`.github/workflows/fork-release-desktop.yml` builds and releases the macOS app
+for you. It works **today with zero secrets** (unsigned — users right-click →
+Open once) and **auto-signs + notarizes** the moment you add the Apple secrets,
+with no rewrite.
+
+1. In your fork: **Settings → Secrets and variables → Actions**, add the
+   **variables** `BUZZ_RELAY_URL`, `BUZZ_RELAY_HTTP`,
+   `BUZZ_AUTO_CONNECT_DEFAULT_RELAY=1`, `BUZZ_GITHUB_CLIENT_ID`.
+2. Push a tag: `git tag v0.5.4 && git push origin v0.5.4` → the workflow builds
+   a `.dmg` and attaches it to a draft GitHub Release. Publish the draft; that's
+   your download link.
+3. When you have the Apple cert, add the `APPLE_*` secrets (and
+   `TAURI_SIGNING_PRIVATE_KEY` for auto-updates) — the next tag is fully signed.
+
+> Note: the repo's built-in `signed-macos-canary.yml` signs via Block's internal
+> service (`OSX_CODESIGN_ROLE` / `CODESIGN_S3_BUCKET`), which a fork can't use —
+> that's why this fork workflow uses standard Apple secrets instead. It also
+> skips the optional `mesh-llm` native build to stay simple and robust.

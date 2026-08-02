@@ -1,0 +1,81 @@
+name: Release desktop (fork)
+
+# Fork-owned release pipeline. Produces a downloadable macOS build and attaches
+# it to a GitHub Release. It works TODAY with no secrets (unsigned — users
+# right-click → Open once), and automatically signs + notarizes the moment you
+# add the Apple secrets below. No rewrite needed to graduate from unsigned to
+# signed.
+#
+# ── Configure once (Settings → Secrets and variables → Actions) ──────────────
+# Variables (public, safe):
+#   BUZZ_RELAY_URL                       wss://relay.yourdomain.com
+#   BUZZ_RELAY_HTTP                      https://relay.yourdomain.com
+#   BUZZ_AUTO_CONNECT_DEFAULT_RELAY      1        (auto-join the baked relay)
+#   BUZZ_GITHUB_CLIENT_ID                your GitHub OAuth app client id
+# Secrets (optional — add when you have the Apple Developer cert):
+#   APPLE_CERTIFICATE                    base64 of your Developer ID .p12
+#   APPLE_CERTIFICATE_PASSWORD           the .p12 password
+#   APPLE_SIGNING_IDENTITY               "Developer ID Application: Name (TEAMID)"
+#   APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID   for notarization
+# Secrets (optional — for auto-updates):
+#   TAURI_SIGNING_PRIVATE_KEY            from `pnpm tauri signer generate`
+#   TAURI_SIGNING_PRIVATE_KEY_PASSWORD
+#
+# Trigger: push a tag like `v0.5.4`, or run manually (produces a draft release).
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write # create the release + upload the build
+
+jobs:
+  release-macos:
+    name: Build + release macOS
+    runs-on: macos-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Activate Hermit toolchain
+        uses: cashapp/activate-hermit@v1
+
+      - name: Install desktop dependencies
+        run: just desktop-install-ci
+
+      # externalBin: the desktop bundle requires the agent sidecars to exist.
+      - name: Build + stage sidecars
+        run: |
+          cargo build --release -p buzz-acp -p buzz-agent -p buzz-dev-mcp -p git-credential-nostr -p buzz-cli
+          ./scripts/bundle-sidecars.sh
+
+      - name: Build, sign (if configured), and release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          # Bake your hosted relay into the app so it auto-connects on launch.
+          BUZZ_RELAY_URL: ${{ vars.BUZZ_RELAY_URL }}
+          BUZZ_RELAY_HTTP: ${{ vars.BUZZ_RELAY_HTTP }}
+          BUZZ_BUILD_AUTO_CONNECT_DEFAULT_RELAY: ${{ vars.BUZZ_AUTO_CONNECT_DEFAULT_RELAY }}
+          BUZZ_BUILD_GITHUB_CLIENT_ID: ${{ vars.BUZZ_GITHUB_CLIENT_ID }}
+          # Apple signing + notarization — absent = unsigned build, present = signed.
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # Auto-updater signature — absent = no updater artifacts, present = signed feed.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: desktop
+          # On a tag, release under that tag; manual runs make a dev draft.
+          tagName: ${{ github.ref_type == 'tag' && github.ref_name || format('v0.0.0-dev.{0}', github.run_number) }}
+          releaseName: "Buzz ${{ github.ref_type == 'tag' && github.ref_name || format('dev {0}', github.run_number) }}"
+          releaseDraft: true
+          prerelease: ${{ github.ref_type != 'tag' }}
