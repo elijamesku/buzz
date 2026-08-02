@@ -20,6 +20,35 @@ import {
 } from "@/shared/ui/dialog";
 import { UserAvatar } from "@/shared/ui/UserAvatar";
 
+type Autonomy = "ask" | "trusted" | "autonomous";
+
+const AUTONOMY_OPTIONS: { value: Autonomy; label: string; blurb: string }[] = [
+  {
+    value: "ask",
+    label: "Ask first",
+    blurb: "Approve every action before it runs.",
+  },
+  {
+    value: "trusted",
+    label: "Trusted",
+    blurb: "Auto-approve routine work; ask on risky moves.",
+  },
+  {
+    value: "autonomous",
+    label: "Autonomous",
+    blurb: "Acts on its own — revoke anytime.",
+  },
+];
+
+function autonomyStorageKey(pubkey: string): string {
+  return `buzz.agent.autonomy.${pubkey}`;
+}
+
+function readAutonomy(pubkey: string): Autonomy {
+  const value = localStorage.getItem(autonomyStorageKey(pubkey));
+  return value === "trusted" || value === "autonomous" ? value : "ask";
+}
+
 /**
  * An agent's "coworker profile": identity + config now, and a performance card
  * (approval, cost, throughput) that fills in as the agent completes real work.
@@ -91,6 +120,15 @@ export function AgentProfileDialog({
         ? { label: "Available", tone: "available" }
         : { label: "Idle", tone: "idle" };
 
+  const [autonomy, setAutonomy] = React.useState<Autonomy>("ask");
+  React.useEffect(() => {
+    if (open) setAutonomy(readAutonomy(pubkey));
+  }, [open, pubkey]);
+  const changeAutonomy = (level: Autonomy) => {
+    setAutonomy(level);
+    localStorage.setItem(autonomyStorageKey(pubkey), level);
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
@@ -112,6 +150,34 @@ export function AgentProfileDialog({
             <Row label="Runtime" value={runtime} />
             <Row label="Tools" value={agent?.mcpCommand?.trim() || "default"} />
           </dl>
+
+          {/* Trust (earned autonomy) */}
+          <div>
+            <p className="mb-2 text-xs font-medium text-muted-foreground">
+              Trust
+            </p>
+            <div className="grid grid-cols-3 gap-1.5">
+              {AUTONOMY_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => changeAutonomy(opt.value)}
+                  className={cn(
+                    "rounded-xl border px-2 py-2 text-2xs font-medium transition-colors",
+                    autonomy === opt.value
+                      ? "border-primary bg-primary/10 text-foreground"
+                      : "border-border/70 text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <p className="mt-2 text-2xs text-muted-foreground/70">
+              {AUTONOMY_OPTIONS.find((o) => o.value === autonomy)?.blurb} Agents
+              earn higher trust automatically as their approval rate proves out.
+            </p>
+          </div>
 
           {/* Performance card */}
           <div>
