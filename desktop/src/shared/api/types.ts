@@ -1065,6 +1065,31 @@ export type GithubPollResult = {
   warnings: string[];
 };
 
+// ── Meetings (huddle transcripts + summaries) ─────────────────────────────────
+
+/** A channel's most recent huddle. Mirrors Rust `LatestHuddle`. */
+export type LatestHuddle = {
+  huddleId: string;
+  startedAt: number;
+};
+
+/** One transcript line for a huddle. Mirrors Rust `TranscriptSegment`. */
+export type TranscriptSegment = {
+  /** Speaker pubkey (hex). */
+  speaker: string;
+  text: string;
+  /** Unix seconds. */
+  at: number;
+};
+
+/** A huddle's meeting summary. Mirrors Rust `MeetingSummary`. */
+export type MeetingSummary = {
+  text: string;
+  at: number;
+  /** Author pubkey (hex). */
+  author: string;
+};
+
 // ── Local backend setup ───────────────────────────────────────────────────────
 
 /**

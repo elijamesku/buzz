@@ -1,5 +1,6 @@
-import { LogIn } from "lucide-react";
+import { FileText, LogIn } from "lucide-react";
 import type * as React from "react";
+import { useState } from "react";
 
 import { ChatHeader } from "@/features/chat/ui/ChatHeader";
 import type { EphemeralChannelDisplay } from "@/features/channels/lib/ephemeralChannel";
@@ -8,6 +9,7 @@ import { getChannelDescription } from "@/features/channels/lib/channelDescriptio
 import { getDmParticipantPreview } from "@/features/channels/lib/dmParticipantDisplay";
 import { ChannelHeaderStatusBadge } from "@/features/channels/ui/ChannelHeaderStatusBadge";
 import { ChannelMembersBar } from "@/features/channels/ui/ChannelMembersBar";
+import { MeetingNotesDialog } from "@/features/channels/ui/MeetingNotesDialog";
 import {
   DEFAULT_HOVER_PROFILE_STATUS_GEOMETRY,
   ProfileAvatarWithStatus,
@@ -63,6 +65,7 @@ export function ChannelScreenHeader({
   onManageChannel,
   onToggleMembers,
 }: ChannelScreenHeaderProps) {
+  const [notesOpen, setNotesOpen] = useState(false);
   const isGroupDm =
     activeChannel?.channelType === "dm" &&
     activeDmHeaderParticipants.length > 1;
@@ -86,15 +89,31 @@ export function ChannelScreenHeader({
         {isJoining ? "Joining…" : "Join"}
       </Button>
     ) : (
-      <ChannelMembersBar
-        channel={activeChannel}
-        currentPubkey={currentPubkey}
-        isAddBotOpen={isAddBotOpen}
-        onAddBotOpenChange={onAddBotOpenChange}
-        onManageChannel={onManageChannel}
-        onToggleMembers={onToggleMembers}
-        variant={actionsVariant}
-      />
+      <div className="flex items-center gap-1">
+        <Button
+          aria-label="Meeting notes"
+          onClick={() => setNotesOpen(true)}
+          size="icon"
+          title="Meeting notes"
+          variant="ghost"
+        >
+          <FileText className="h-4 w-4" />
+        </Button>
+        <ChannelMembersBar
+          channel={activeChannel}
+          currentPubkey={currentPubkey}
+          isAddBotOpen={isAddBotOpen}
+          onAddBotOpenChange={onAddBotOpenChange}
+          onManageChannel={onManageChannel}
+          onToggleMembers={onToggleMembers}
+          variant={actionsVariant}
+        />
+        <MeetingNotesDialog
+          channelId={activeChannel.id}
+          onOpenChange={setNotesOpen}
+          open={notesOpen}
+        />
+      </div>
     )
   ) : null;
 

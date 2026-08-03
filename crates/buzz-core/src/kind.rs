@@ -581,6 +581,13 @@ pub const KIND_HUDDLE_PARTICIPANT_JOINED: u32 = 48101;
 pub const KIND_HUDDLE_PARTICIPANT_LEFT: u32 = 48102;
 /// A huddle ended.
 pub const KIND_HUDDLE_ENDED: u32 = 48103;
+/// A transcript segment for a huddle: one spoken line. `content` is the text;
+/// tags carry the huddle id, the speaker (`p`), and the start offset. Emitted
+/// by whatever performs speech-to-text (agents bring their own STT).
+pub const KIND_HUDDLE_TRANSCRIPT: u32 = 48104;
+/// A meeting summary for a huddle: `content` is the summary text, tagged with
+/// the huddle id. Produced from the transcript after the huddle ends.
+pub const KIND_HUDDLE_SUMMARY: u32 = 48105;
 /// Huddle channel guidelines/rules document.
 pub const KIND_HUDDLE_GUIDELINES: u32 = 48106;
 
@@ -736,6 +743,8 @@ pub const ALL_KINDS: &[u32] = &[
     KIND_HUDDLE_PARTICIPANT_JOINED,
     KIND_HUDDLE_PARTICIPANT_LEFT,
     KIND_HUDDLE_ENDED,
+    KIND_HUDDLE_TRANSCRIPT,
+    KIND_HUDDLE_SUMMARY,
     KIND_HUDDLE_GUIDELINES,
     KIND_MEDIA_UPLOAD,
     KIND_GIT_REPO_ANNOUNCEMENT,
