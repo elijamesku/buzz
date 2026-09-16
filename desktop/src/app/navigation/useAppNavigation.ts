@@ -104,6 +104,17 @@ export function useAppNavigation() {
     [commitNavigation],
   );
 
+  const goTimeMachine = React.useCallback(
+    (behavior?: NavigationBehavior) =>
+      commitNavigation(
+        {
+          to: "/time-machine",
+        },
+        behavior,
+      ),
+    [commitNavigation],
+  );
+
   const goProfile = React.useCallback(
     (pubkey: string, behavior?: NavigationBehavior) =>
       commitNavigation(
@@ -472,6 +483,7 @@ export function useAppNavigation() {
     goPulse,
     goProfile,
     goSettings,
+    goTimeMachine,
     goWorkflow,
     goWorkflows,
     openSearchHit,

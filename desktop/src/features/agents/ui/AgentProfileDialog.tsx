@@ -1,6 +1,13 @@
 import * as React from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Activity } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  Activity,
+  Receipt,
+  ShieldCheck,
+  ThumbsDown,
+  ThumbsUp,
+} from "lucide-react";
+import { toast } from "sonner";
 
 import {
   useAgentConfigSurface,
@@ -9,9 +16,18 @@ import {
   useUpdateManagedAgentMutation,
 } from "@/features/agents/hooks";
 import { useAgentWorking } from "@/features/agents/agentWorkingSignal";
+import { VerifyReceiptDialog } from "@/features/agents/ui/VerifyReceiptDialog";
 import { getAgentPerformance } from "@/shared/api/tauriAgentPerformance";
+import {
+  getAgentTrustLedger,
+  mintWorkReceipt,
+  recordTrustDecision,
+} from "@/shared/api/tauriTrustLedger";
+import type { TrustLevel, WorkSession } from "@/shared/api/types";
+import { copyTextToClipboard } from "@/shared/lib/clipboard";
 import { normalizePubkey } from "@/shared/lib/pubkey";
 import { cn } from "@/shared/lib/cn";
+import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import {
   Dialog,
@@ -21,7 +37,7 @@ import {
 } from "@/shared/ui/dialog";
 import { UserAvatar } from "@/shared/ui/UserAvatar";
 
-type Autonomy = "ask" | "trusted" | "autonomous";
+type Autonomy = TrustLevel;
 
 const AUTONOMY_OPTIONS: { value: Autonomy; label: string; blurb: string }[] = [
   {
@@ -40,6 +56,16 @@ const AUTONOMY_OPTIONS: { value: Autonomy; label: string; blurb: string }[] = [
     blurb: "Skips the permission flow — acts on its own.",
   },
 ];
+const AUTONOMY_LABEL: Record<Autonomy, string> = {
+  ask: "Ask first",
+  trusted: "Trusted",
+  autonomous: "Autonomous",
+};
+const AUTONOMY_RANK: Record<Autonomy, number> = {
+  ask: 0,
+  trusted: 1,
+  autonomous: 2,
+};
 
 // Trust is the agent's real spawn-time permission mode
 // (BUZZ_ACP_PERMISSION_MODE, read by the ACP harness). Not reserved, so it
@@ -57,8 +83,10 @@ const MODE_TO_AUTONOMY: Record<string, Autonomy> = {
 };
 
 /**
- * An agent's "coworker profile": identity + config now, and a performance card
- * (approval, cost, throughput) that fills in as the agent completes real work.
+ * An agent's "coworker profile": identity + config now, a performance card
+ * (approval, cost, throughput) that fills in as the agent completes real work,
+ * and the trust ledger — the owner's signed decisions on that work, which is
+ * what the agent's autonomy is earned from.
  * Styled to match the app's agent cards (rounded-2xl, border-border/70,
  * muted surfaces) rather than introducing a new look.
  */
@@ -80,6 +108,7 @@ export function AgentProfileDialog({
   const { data: agents } = useManagedAgentsQuery();
   const { data: personas } = usePersonasQuery();
   const work = useAgentWorking(pubkey);
+  const queryClient = useQueryClient();
   // Poll while open so the card updates live as the agent works.
   const { data: perf } = useQuery({
     queryKey: ["agent-performance", pubkey],
@@ -88,6 +117,51 @@ export function AgentProfileDialog({
     refetchInterval: open ? 8_000 : false,
     staleTime: 4_000,
   });
+  const ledgerKey = React.useMemo(
+    () => ["agent-trust-ledger", pubkey] as const,
+    [pubkey],
+  );
+  const { data: ledger } = useQuery({
+    queryKey: ledgerKey,
+    queryFn: () => getAgentTrustLedger(pubkey),
+    enabled: open,
+    refetchInterval: open ? 15_000 : false,
+    staleTime: 8_000,
+  });
+
+  const decide = useMutation({
+    mutationFn: (input: { sessionId: string; approved: boolean }) =>
+      recordTrustDecision({ agentPubkey: pubkey, ...input }),
+    onSuccess: (fresh, input) => {
+      queryClient.setQueryData(ledgerKey, fresh);
+      toast.success(
+        input.approved
+          ? "Approved — signed to the ledger"
+          : "Rejected — signed to the ledger",
+      );
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error ? error.message : "Could not record decision",
+      );
+    },
+  });
+  const mint = useMutation({
+    mutationFn: () => mintWorkReceipt(pubkey),
+    onSuccess: (receipt) => {
+      copyTextToClipboard(
+        receipt.receiptJson,
+        "Signed receipt copied — paste it anywhere to verify",
+      );
+      void queryClient.invalidateQueries({ queryKey: ledgerKey });
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error ? error.message : "Could not mint receipt",
+      );
+    },
+  });
+  const [verifyOpen, setVerifyOpen] = React.useState(false);
 
   const agent = React.useMemo(() => {
     const key = normalizePubkey(pubkey);
@@ -145,9 +219,20 @@ export function AgentProfileDialog({
     });
   };
 
+  const eligible: Autonomy = ledger?.eligibleLevel ?? "ask";
+  const canPromote =
+    agent !== null &&
+    ledger !== undefined &&
+    ledger.decided > 0 &&
+    AUTONOMY_RANK[eligible] > AUTONOMY_RANK[autonomy];
+  const approvalRate =
+    ledger && ledger.decided > 0
+      ? `${Math.round(ledger.approvalRate * 100)}%`
+      : "—";
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-h-[85vh] max-w-md overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-3">
             <UserAvatar avatarUrl={avatarUrl} displayName={name} size="md" />
@@ -196,6 +281,75 @@ export function AgentProfileDialog({
             </p>
           </div>
 
+          {/* Earned trust — what the signed ledger supports */}
+          <div
+            className="rounded-2xl border border-border/70 bg-muted/30 px-3 py-2.5"
+            data-testid="agent-earned-trust"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                <ShieldCheck className="size-3.5" />
+                Earned trust
+              </p>
+              <Badge
+                variant={
+                  eligible === "autonomous"
+                    ? "success"
+                    : eligible === "trusted"
+                      ? "info"
+                      : "outline"
+                }
+              >
+                {AUTONOMY_LABEL[eligible]}
+              </Badge>
+            </div>
+            <p className="mt-1.5 text-sm text-foreground">
+              {ledger && ledger.decided > 0
+                ? `${ledger.approved} of ${ledger.decided} sessions approved`
+                : "No decisions yet"}
+            </p>
+            <p className="mt-0.5 text-2xs text-muted-foreground/70">
+              {ledger?.nextLevelHint ??
+                "Review sessions below to start the ledger."}
+            </p>
+            {canPromote ? (
+              <Button
+                className="mt-2 w-full"
+                disabled={updateAgent.isPending}
+                onClick={() => changeAutonomy(eligible)}
+                size="sm"
+                variant="outline"
+              >
+                Promote to {AUTONOMY_LABEL[eligible]}
+              </Button>
+            ) : null}
+          </div>
+
+          {/* Review recent work — every click is a signed decision */}
+          <div>
+            <p className="mb-2 text-xs font-medium text-muted-foreground">
+              Review recent work
+            </p>
+            {ledger && ledger.sessions.length > 0 ? (
+              <ul className="space-y-1.5">
+                {ledger.sessions.slice(0, 5).map((session) => (
+                  <SessionRow
+                    key={session.sessionId}
+                    onDecide={(approved) =>
+                      decide.mutate({ sessionId: session.sessionId, approved })
+                    }
+                    pending={decide.isPending}
+                    session={session}
+                  />
+                ))}
+              </ul>
+            ) : (
+              <p className="text-2xs text-muted-foreground/70">
+                Sessions appear here once the agent has done real work.
+              </p>
+            )}
+          </div>
+
           {/* Performance card */}
           <div>
             <p className="mb-2 text-xs font-medium text-muted-foreground">
@@ -206,15 +360,15 @@ export function AgentProfileDialog({
                 <div className="grid grid-cols-2 gap-2">
                   <Stat label="Tasks done" value={String(perf.tasks)} />
                   <Stat label="Turns" value={formatCompact(perf.turns)} />
-                  <Stat label="Approval rate" value="—" />
+                  <Stat label="Approval rate" value={approvalRate} />
                   <Stat
                     label="Last active"
                     value={formatWhen(perf.lastActive)}
                   />
                 </div>
                 <p className="mt-2 text-2xs text-muted-foreground/70">
-                  From this agent's own signed turn metrics. Approval rate lands
-                  once approvals are wired.
+                  From this agent's own signed turn metrics and your signed
+                  decisions on them.
                 </p>
               </>
             ) : (
@@ -228,13 +382,85 @@ export function AgentProfileDialog({
             )}
           </div>
 
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              disabled={!ledger || ledger.decided === 0 || mint.isPending}
+              onClick={() => mint.mutate()}
+              title="Sign a portable receipt of this agent's ledger"
+              variant="outline"
+            >
+              <Receipt className="h-4 w-4" />
+              {mint.isPending ? "Signing…" : "Mint receipt"}
+            </Button>
+            <Button onClick={() => setVerifyOpen(true)} variant="outline">
+              <ShieldCheck className="h-4 w-4" />
+              Verify a receipt
+            </Button>
+          </div>
+
           <Button className="w-full" onClick={onViewActivity}>
             <Activity className="h-4 w-4" />
             View activity
           </Button>
         </div>
       </DialogContent>
+      <VerifyReceiptDialog onOpenChange={setVerifyOpen} open={verifyOpen} />
     </Dialog>
+  );
+}
+
+function SessionRow({
+  onDecide,
+  pending,
+  session,
+}: {
+  onDecide: (approved: boolean) => void;
+  pending: boolean;
+  session: WorkSession;
+}): React.ReactElement {
+  return (
+    <li
+      className="flex items-center gap-2 rounded-xl border border-border/70 px-2.5 py-1.5"
+      data-testid={`agent-session-${session.sessionId}`}
+    >
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm text-foreground">
+          {formatUnix(session.lastAt)}
+        </p>
+        <p className="text-2xs text-muted-foreground">
+          {session.turns} turn{session.turns === 1 ? "" : "s"}
+          {session.costUsd > 0 ? ` · $${session.costUsd.toFixed(2)}` : ""}
+        </p>
+      </div>
+      {session.decision === null ? (
+        <div className="flex gap-1">
+          <Button
+            aria-label="Approve this session"
+            disabled={pending}
+            onClick={() => onDecide(true)}
+            size="icon"
+            title="Approve"
+            variant="ghost"
+          >
+            <ThumbsUp className="size-4" />
+          </Button>
+          <Button
+            aria-label="Reject this session"
+            disabled={pending}
+            onClick={() => onDecide(false)}
+            size="icon"
+            title="Reject"
+            variant="ghost"
+          >
+            <ThumbsDown className="size-4" />
+          </Button>
+        </div>
+      ) : (
+        <Badge variant={session.decision ? "success" : "destructive"}>
+          {session.decision ? "Approved" : "Rejected"}
+        </Badge>
+      )}
+    </li>
   );
 }
 
@@ -249,6 +475,15 @@ function formatWhen(iso: string | null): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "—";
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function formatUnix(unixSeconds: number): string {
+  return new Date(unixSeconds * 1_000).toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
 function Row({
