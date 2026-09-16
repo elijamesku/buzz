@@ -11,13 +11,10 @@ __pycache__/
 .hooks/
 
 # Environment files (may contain secrets)
-.env
-.env.local
 .env.*.local
 
 # Editor / IDE
 .idea/
-.vscode/*
 !.vscode/settings.json
 *.swp
 *.swo
@@ -72,3 +69,7 @@ identity.key
 
 # Helm dependency tarballs — regenerable from Chart.lock via `helm dependency build`
 deploy/charts/*/charts/*.tgz
+branch_structure.json
+temp_auto_push.bat
+temp_interactive_push.bat
+config.bat
