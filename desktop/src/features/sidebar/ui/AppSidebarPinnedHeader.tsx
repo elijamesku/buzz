@@ -1,4 +1,4 @@
-import { Activity, Bot, Folders, Inbox, Zap } from "lucide-react";
+import { Activity, Bot, Folders, History, Inbox, Zap } from "lucide-react";
 
 import { TopbarSearch } from "@/features/search/ui/TopbarSearch";
 import { SidebarProjectsSection } from "@/features/sidebar/ui/SidebarProjectsSection";
@@ -21,7 +21,8 @@ type SidebarSelectedView =
   | "agents"
   | "workflows"
   | "pulse"
-  | "projects";
+  | "projects"
+  | "time-machine";
 
 type AppSidebarPinnedHeaderProps = {
   channelLabels: Record<string, string>;
@@ -45,6 +46,7 @@ type AppSidebarPrimaryMenuProps = {
   onSelectHome: () => void;
   onSelectProjects: () => void;
   onSelectPulse: () => void;
+  onSelectTimeMachine: () => void;
   onSelectWorkflows: () => void;
   projectsOverviewActive: boolean;
   selectedView: SidebarSelectedView;
@@ -95,6 +97,7 @@ export function AppSidebarPrimaryMenu({
   onSelectHome,
   onSelectProjects,
   onSelectPulse,
+  onSelectTimeMachine,
   onSelectWorkflows,
   projectsOverviewActive,
   selectedView,
@@ -141,6 +144,18 @@ export function AppSidebarPrimaryMenu({
               </SidebarMenuButton>
             </SidebarMenuItem>
           </FeatureGate>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              data-testid="open-time-machine-view"
+              isActive={selectedView === "time-machine"}
+              onClick={onSelectTimeMachine}
+              tooltip="Time machine"
+              type="button"
+            >
+              <History className="h-4 w-4" />
+              <SidebarMenuLabel>Time machine</SidebarMenuLabel>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
           <FeatureGate feature="projects">
             <SidebarMenuItem>
               <SidebarMenuButton

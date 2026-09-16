@@ -1033,6 +1033,104 @@ export type AgentPerformance = {
   models: string[];
 };
 
+// ── Trust ledger (earned autonomy) ───────────────────────────────────────────
+
+/** One owner-signed approve/reject of an agent session. Mirrors Rust `TrustDecision`. */
+export type TrustDecision = {
+  id: string;
+  sessionId: string;
+  approved: boolean;
+  note: string;
+  /** Unix seconds. */
+  at: number;
+};
+
+/** One of an agent's real work sessions, from its signed turn metrics. Mirrors Rust `WorkSession`. */
+export type WorkSession = {
+  sessionId: string;
+  channelId: string | null;
+  turns: number;
+  costUsd: number;
+  firstAt: number;
+  lastAt: number;
+  /** The owner's latest decision on this session, if any. */
+  decision: boolean | null;
+  decidedAt: number | null;
+};
+
+export type TrustLevel = "ask" | "trusted" | "autonomous";
+
+/**
+ * An agent's trust ledger: its sessions, the owner's signed decisions on
+ * them, and the autonomy level those decisions have earned. Mirrors Rust
+ * `TrustLedger`.
+ */
+export type TrustLedger = {
+  agentPubkey: string;
+  ownerPubkey: string;
+  /** Most recent first, capped for display; totals cover everything. */
+  sessions: WorkSession[];
+  totalSessions: number;
+  totalTurns: number;
+  totalCostUsd: number;
+  decided: number;
+  approved: number;
+  rejected: number;
+  /** 0–1; 0 when nothing has been decided. */
+  approvalRate: number;
+  eligibleLevel: TrustLevel;
+  nextLevelHint: string;
+};
+
+/** The signed content of a work receipt. Mirrors Rust `ReceiptSummary`. */
+export type ReceiptSummary = {
+  version: number;
+  agentPubkey: string;
+  ownerPubkey: string;
+  issuedAt: number;
+  totalSessions: number;
+  totalTurns: number;
+  totalCostUsd: number;
+  decided: number;
+  approved: number;
+  rejected: number;
+  approvalRate: number;
+  eligibleLevel: TrustLevel;
+};
+
+/** A minted receipt. `receiptJson` is the signed event — the shareable artifact. */
+export type WorkReceipt = {
+  eventId: string;
+  receiptJson: string;
+  summary: ReceiptSummary;
+};
+
+/** Result of verifying a receipt offline. Mirrors Rust `ReceiptVerification`. */
+export type ReceiptVerification = {
+  valid: boolean;
+  reason: string;
+  issuerPubkey: string | null;
+  agentPubkey: string | null;
+  issuedAt: number | null;
+  summary: ReceiptSummary | null;
+};
+
+// ── Time machine ──────────────────────────────────────────────────────────────
+
+/** One event in the org timeline. Mirrors Rust `TimelineEvent`. */
+export type TimelineEvent = {
+  id: string;
+  kind: number;
+  /** Unix seconds. */
+  at: number;
+  author: string;
+  channelId: string | null;
+  agent: string | null;
+  sessionId: string | null;
+  refId: string | null;
+  preview: string;
+};
+
 // ── Design workspace ──────────────────────────────────────────────────────────
 
 /**

@@ -526,6 +526,14 @@ pub const KIND_JOB_RESULT: u32 = 43004;
 pub const KIND_JOB_CANCEL: u32 = 43005;
 /// An agent job failed with an error.
 pub const KIND_JOB_ERROR: u32 = 43006;
+/// An owner-signed trust decision about one of an agent's work sessions —
+/// approved or rejected. Tagged with the agent (`agent`, `p`) and the session
+/// (`session`). The ledger of these decisions is what earns an agent autonomy.
+pub const KIND_TRUST_DECISION: u32 = 43101;
+/// A portable, owner-signed work receipt summarizing an agent's trust ledger
+/// (decisions, approval rate, earned level). Verifiable off-platform from the
+/// event signature alone.
+pub const KIND_WORK_RECEIPT: u32 = 43102;
 
 /// Relay-signed notification: the target pubkey was added to a channel.
 /// Stored globally (channel_id = None) with p-tag = target, h-tag = channel UUID.
@@ -731,6 +739,8 @@ pub const ALL_KINDS: &[u32] = &[
     KIND_JOB_RESULT,
     KIND_JOB_CANCEL,
     KIND_JOB_ERROR,
+    KIND_TRUST_DECISION,
+    KIND_WORK_RECEIPT,
     KIND_MEMBER_ADDED_NOTIFICATION,
     KIND_MEMBER_REMOVED_NOTIFICATION,
     KIND_AGENT_TURN_METRIC,
