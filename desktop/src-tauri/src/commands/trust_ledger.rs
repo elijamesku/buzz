@@ -282,7 +282,7 @@ fn build_ledger(
     let total_cost_usd = sessions.values().map(|s| s.cost_usd).sum();
 
     let mut recent: Vec<WorkSession> = sessions.into_values().collect();
-    recent.sort_by(|a, b| b.last_at.cmp(&a.last_at));
+    recent.sort_by_key(|session| std::cmp::Reverse(session.last_at));
     recent.truncate(25);
 
     TrustLedger {
