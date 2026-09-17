@@ -4792,7 +4792,15 @@ test("members sidebar retains distinct same-persona managed agents", async ({
   await expect(
     page.getByTestId(`channel-user-search-result-${outOfChannelAgentPubkey}`),
   ).toBeVisible();
-  await expect(page.getByText("Pinky", { exact: true })).toHaveCount(2);
+  // Members panel: the in-channel agent in the list + the out-of-channel one
+  // as a search hit. The sidebar's "Your team" roster lists every managed
+  // agent too, so the count is scoped to the panel rather than the page.
+  await expect(
+    page.getByTestId("members-sidebar").getByText("Pinky", { exact: true }),
+  ).toHaveCount(2);
+  await expect(
+    page.getByTestId("sidebar-team-roster").getByText("Pinky", { exact: true }),
+  ).toHaveCount(2);
 });
 
 test("private-channel members can add people and managed agents without admin", async ({
