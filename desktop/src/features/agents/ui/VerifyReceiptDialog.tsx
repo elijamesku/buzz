@@ -3,6 +3,7 @@ import { ShieldCheck, ShieldX } from "lucide-react";
 
 import { verifyWorkReceipt } from "@/shared/api/tauriTrustLedger";
 import type { ReceiptVerification } from "@/shared/api/types";
+import { truncateNpub } from "@/shared/lib/pubkey";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import {
@@ -18,12 +19,6 @@ const LEVEL_LABEL: Record<string, string> = {
   trusted: "Trusted",
   autonomous: "Autonomous",
 };
-
-function shortKey(pubkey: string): string {
-  return pubkey.length > 16
-    ? `${pubkey.slice(0, 8)}…${pubkey.slice(-6)}`
-    : pubkey;
-}
 
 function formatIssued(unixSeconds: number): string {
   return new Date(unixSeconds * 1_000).toLocaleString(undefined, {
@@ -125,11 +120,11 @@ export function VerifyReceiptDialog({
                 <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
                   <dt className="text-muted-foreground">Issuer</dt>
                   <dd className="font-mono text-xs">
-                    {shortKey(result.issuerPubkey ?? "")}
+                    {truncateNpub(result.issuerPubkey ?? "")}
                   </dd>
                   <dt className="text-muted-foreground">Agent</dt>
                   <dd className="font-mono text-xs">
-                    {shortKey(result.summary.agentPubkey)}
+                    {truncateNpub(result.summary.agentPubkey)}
                   </dd>
                   <dt className="text-muted-foreground">Issued</dt>
                   <dd>{formatIssued(result.issuedAt ?? 0)}</dd>

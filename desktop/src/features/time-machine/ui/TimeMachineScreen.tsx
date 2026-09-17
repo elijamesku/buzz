@@ -13,7 +13,7 @@ import {
 import { getOrgTimeline } from "@/shared/api/tauriTimeMachine";
 import type { TimelineEvent } from "@/shared/api/types";
 import { cn } from "@/shared/lib/cn";
-import { normalizePubkey } from "@/shared/lib/pubkey";
+import { normalizePubkey, truncateNpub } from "@/shared/lib/pubkey";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import { UserAvatar } from "@/shared/ui/UserAvatar";
@@ -31,10 +31,6 @@ const TICK_MS = 50;
 const FEED_ROWS = 40;
 
 type Named = { name: string; avatarUrl: string | null };
-
-function shortKey(pubkey: string): string {
-  return `${pubkey.slice(0, 6)}…${pubkey.slice(-4)}`;
-}
 
 function formatInstant(unixSeconds: number): string {
   return new Date(unixSeconds * 1_000).toLocaleString(undefined, {
@@ -133,7 +129,7 @@ export function TimeMachineScreen(): React.ReactElement {
   }, [channels]);
   const nameOf = (pubkey: string): Named =>
     agentNames.get(normalizePubkey(pubkey)) ?? {
-      name: shortKey(pubkey),
+      name: truncateNpub(pubkey),
       avatarUrl: null,
     };
   const channelOf = (channelId: string | null): string | null =>
